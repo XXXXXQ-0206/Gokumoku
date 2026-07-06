@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+*.bak*
+*.sqlite3
+*.jsonl
+*.zip
+.env
+leveldb.db/
+server/leveldb.db/
+server/web_search
+engines/
+upstream/
+screenshots/raw/

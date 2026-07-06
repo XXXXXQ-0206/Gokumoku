@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Gomoku</title>
+    <script src="js/jquery.js"></script>
+</head>
+
+<body>
+    <img id="hint" src="pic/line.png" hidden="hidden">
+    <div id="cubes">
+    </div>
+    <img src="pic/board.jpg" width="450px" height="450px">
+    <div>
+        <button onclick="rollback();" type="button">悔棋 (BACK)</button>
+        <button onclick="start();" type="button">重新开始 (RESTART)</button>
+        <button id="black-ai-button" onclick="toggleBlackAi();" type="button">取消执黑（Stop AI Black）</button>
+        <button id="white-ai-button" onclick="toggleWhiteAi();" type="button">机器执白（AI White）</button>
+    </div>
+    <hr/>
+    <div id="board-info-panel" style="font-family: Arial, sans-serif;"></div>
+</body>
+<script>
+    var steps_string = normalizeStepsString(findGetParameter("init_steps"));
+    var blackAiEnabled = true;
+    var person2personGet = findGetParameter("person2person");
+    if(person2personGet != null){
+        blackAiEnabled = false;
+    }
+
+    var init_steps = parseStepsString(steps_string);
+    var gameOver = false;
+    var level = "HIGH";
+    var thinking = false;
+    var whiteThinking = false;
+    var whiteAiEnabled = false;
+    var historyStack = new Array();
+    var aiColor = "BLACK";
+    var rollbackTime = 0;
+    var gameId = guid();
+    var lastSubmittedPayload = null;
+    var lastResponsePayload = null;
+    var lastRequestError = null;
+    var lastRoundTripMs = null;
+    var whiteAiTarget = "auto";
+    var whiteAiOpponent = "fucusy";
+    var blackAiTarget = "auto";
+    var blackRequestId = 0;
+    var whiteRequestId = 0;
+    var blackRequestXhr = null;
+    var whiteRequestXhr = null;
+    var currentBlackEngine = "fucusy_black";
+    var currentBlackFallbackReason = null;
+
+    var content = "";
+    for (var i = 0; i < 15; i++) {
+        content = content + "<div>";
+        for (var j = 0; j < 15; j++) {
+            content = content + "<img tag='.' lx='" + i + "' ly='" + j + "'  onClick='onClickCube(this)' id='" + i + "-" + j + "' style='" + getLocation(i, j) + "' src='pic/blank.png'>"
+        }
+        content = content + "</div>";
+    }
+    $("#cubes").html(content);
+
+    start();
+    function findGetParameter(parameterName) {
+        var result = null,
+            tmp = [];
+        location.search
+        .substr(1)
+        .split("&")
+        .forEach(function (item) {
+          tmp = item.split("=");
+          if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
+        });
+        return result;
+    }
+
+    function parseStepsString(raw) {
+        raw = raw == null ? "" : String(raw).trim();
+        raw = raw.replace(/^_+|_+$/g, "");
+        if (raw == "") {
+            return [];
+        }
+        return raw.split("_").filter(function (move) {
+            return move != "";
+        });
+    }
+
+    function normalizeStepsString(raw) {
+        var steps = parseStepsString(raw);
+        return steps.length > 0 ? steps.join("_") : "h8";
+    }
+
+    function moveStringToPoint(move) {
+        if (!/^[a-o](?:[1-9]|1[0-5])$/.test(move)) {
+            return null;
+        }
+        return {
+            "x": move.charCodeAt(0) - "a".charCodeAt(0),
+            "y": parseInt(move.substring(1), 10) - 1
+        };
+    }
+
+    function isInBoard(x, y) {
+        return typeof x == "number" && typeof y == "number" && isFinite(x) && isFinite(y) &&
+            Math.floor(x) == x && Math.floor(y) == y && x >= 0 && x < 15 && y >= 0 && y < 15;
+    }
+
+    function isEmptyPoint(x, y) {
+        return isInBoard(x, y) && $("#" + x + "-" + y).attr("tag") == ".";
+    }
+
+    function setFrontendError(status, error, responseText) {
+        lastRequestError = {
+            "status": status,
+            "error": error,
+            "responseText": responseText
+        };
+    }
+
+    // steps is array of string, [a1, b2]
+    function init(steps){
+        var steps_len = steps.length;
+        for (var i = 0; i < steps_len; i++) {
+            var point = moveStringToPoint(steps[i]);
+            if (point == null || !isEmptyPoint(point.x, point.y)) {
+                setFrontendError("init_steps", "invalid_or_occupied_move", steps[i]);
+                break;
+            }
+            var color = aiColor;
+            if(i % 2){
+                color = getOtherColor(aiColor);
+            }else{
+                color = aiColor;
+            }
+            setColor(point.x, point.y, getColorChar(color));
+            if (gameOver) {
+                break;
+            }
+        }
+    }
+
+    function historyStack2stepsString(history){
+        var stepString = "";
+        for (var i = 0; i < history.length; i++) {
+            var char_x = String.fromCharCode(history[i].x + "a".charCodeAt(0));
+            var y_start_1 = history[i].y + 1;
+            stepString = stepString + "_" + char_x + y_start_1;
+        }
+        return stepString;
+    }
+
+    function position2move(x, y) {
+        return String.fromCharCode(x + "a".charCodeAt(0)) + (y + 1);
+    }
+
+    function resetRequestTrace() {
+        lastSubmittedPayload = null;
+        lastResponsePayload = null;
+        lastRequestError = null;
+        lastRoundTripMs = null;
+    }
+
+    function resetRuntimeStatus() {
+        resetRequestTrace();
+        currentBlackEngine = "fucusy_black";
+        currentBlackFallbackReason = null;
+    }
+
+    function cancelBlackRequest() {
+        blackRequestId++;
+        thinking = false;
+        if (blackRequestXhr != null) {
+            blackRequestXhr.abort();
+            blackRequestXhr = null;
+        }
+    }
+
+    function cancelWhiteRequest() {
+        whiteRequestId++;
+        whiteThinking = false;
+        if (whiteRequestXhr != null) {
+            whiteRequestXhr.abort();
+            whiteRequestXhr = null;
+        }
+    }
+
+    function cancelAllRequests() {
+        cancelBlackRequest();
+        cancelWhiteRequest();
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function formatValue(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        if (Array.isArray(value)) {
+            return value.length > 0 ? escapeHtml(value.join(", ")) : "(空)";
+        }
+        if (typeof value === "object") {
+            return escapeHtml(JSON.stringify(value));
+        }
+        return escapeHtml(String(value));
+    }
+
+    function formatBool(value) {
+        return value ? "是" : "否";
+    }
+
+    function buildInfoTable(title, rows) {
+        var html = "<table style='border-collapse:collapse;width:100%;margin:0 0 12px 0;table-layout:fixed;'>";
+        html += "<thead><tr><th colspan='2' style='border:1px solid #ccc;background:#f5f5f5;padding:6px 8px;text-align:left;'>" + escapeHtml(title) + "</th></tr></thead><tbody>";
+        for (var i = 0; i < rows.length; i++) {
+            html += "<tr>";
+            html += "<th style='border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;width:220px;'>" + escapeHtml(rows[i][0]) + "</th>";
+            html += "<td style='border:1px solid #ccc;padding:6px 8px;vertical-align:top;word-break:break-word;'>" + rows[i][1] + "</td>";
+            html += "</tr>";
+        }
+        html += "</tbody></table>";
+        return html;
+    }
+
+    function getNextRequestPayload() {
+        if (gameOver || thinking || whiteThinking) {
+            return null;
+        }
+        var currentBoardCode = historyStack2stepsString(historyStack);
+        if (whiteAiEnabled && historyStack.length % 2 == 1) {
+            return {
+                "url": "/white_next_step",
+                "stepsString": currentBoardCode,
+                "color": "WHITE",
+                "level": level,
+                "gameId": gameId,
+                "target": whiteAiTarget,
+                "opponent": getWhiteAiOpponent()
+            };
+        }
+        if (blackAiEnabled && historyStack.length % 2 == 0) {
+            return {
+                "url": "/next_step",
+                "stepsString": currentBoardCode,
+                "color": aiColor,
+                "level": level,
+                "gameId": gameId,
+                "target": blackAiTarget
+            };
+        }
+        return null;
+    }
+
+    function getWhiteAiOpponent() {
+        if ((currentBlackEngine || "").indexOf("calculator") >= 0) {
+            return "calculator";
+        }
+        return "fucusy";
+    }
+
+    function renderBoardInfoPanel() {
+        var currentBoardCode = historyStack2stepsString(historyStack);
+        var currentRequestPayload = getNextRequestPayload();
+        var responseSummary = lastResponsePayload && lastResponsePayload.summary ? lastResponsePayload.summary : null;
+        var currentBoardRows = [
+            ["棋面状态码", formatValue(currentBoardCode)],
+            ["步数", formatValue(historyStack.length)],
+            ["下一手颜色", formatValue(historyStack.length % 2 == 0 ? "黑棋" : "白棋")],
+            ["最后一手", formatValue(historyStack.length > 0 ? position2move(historyStack[historyStack.length - 1].x, historyStack[historyStack.length - 1].y) : null)],
+            ["计算状态", formatValue(thinking ? "黑棋计算中" : (whiteThinking ? "白棋计算中" : "空闲"))],
+            ["是否终局", formatValue(formatBool(gameOver))]
+        ];
+
+        var requestRows = [
+            ["最近请求接口", formatValue(lastSubmittedPayload ? lastSubmittedPayload.url : (currentRequestPayload ? currentRequestPayload.url : null))],
+            ["请求颜色", formatValue(lastSubmittedPayload ? lastSubmittedPayload.color : (currentRequestPayload ? currentRequestPayload.color : null))],
+            ["请求目标", formatValue(lastSubmittedPayload ? lastSubmittedPayload.target : (currentRequestPayload ? currentRequestPayload.target : null))],
+            ["请求对手", formatValue(lastSubmittedPayload ? lastSubmittedPayload.opponent : (currentRequestPayload ? currentRequestPayload.opponent : null))]
+        ];
+
+        var responseRows = [
+            ["最近后端来源", formatValue(responseSummary ? responseSummary.source : (lastResponsePayload ? lastResponsePayload.source : null))],
+            ["当前黑棋", formatValue(currentBlackEngine)],
+            ["黑棋 fallback 原因", formatValue(currentBlackFallbackReason)],
+            ["后端返回落子", formatValue(responseSummary ? responseSummary.selected_move : (lastResponsePayload ? lastResponsePayload.selected_move : null))],
+            ["白棋目标", formatValue(responseSummary ? responseSummary.target : (lastResponsePayload ? lastResponsePayload.target : null))],
+            ["选择状态", formatValue(responseSummary ? responseSummary.status : (lastResponsePayload && lastResponsePayload.chosen ? lastResponsePayload.chosen.status : null))],
+            ["最近一次请求耗时(ms)", formatValue(lastRoundTripMs)]
+        ];
+
+        var errorRows = [
+            ["错误状态", formatValue(lastRequestError ? lastRequestError.status : null)],
+            ["错误信息", formatValue(lastRequestError ? lastRequestError.error : null)],
+            ["错误返回", formatValue(lastRequestError ? lastRequestError.responseText : null)]
+        ];
+
+        var html = "";
+        html += buildInfoTable("当前棋局", currentBoardRows);
+        html += buildInfoTable("当前若发送给后端", requestRows);
+        html += buildInfoTable("最近一次后端返回", responseRows);
+        if (lastRequestError != null) {
+            html += buildInfoTable("最近一次请求错误", errorRows);
+        }
+        $("#board-info-panel").html(html);
+    }
+
+    function start() {
+        cancelAllRequests();
+        gameOver = false;
+        historyStack = new Array();
+        gameId = guid();
+        resetRuntimeStatus();
+        for (var i = 0; i < 15; i++)
+            for (var j = 0; j < 15; j++) {
+                var id = "#" + i + "-" + j;
+                $(id).attr("tag", ".");
+                $(id).attr("src", "pic/blank.png");
+            }
+        hiddenHint();
+        init(init_steps);
+        updateModeIndicator();
+        maybeSubmitNextAiTurn();
+        renderBoardInfoPanel();
+    }
+
+    function rollback(x, y, color) {
+        rollbackTime++;
+        cancelAllRequests();
+        if (historyStack.length < 1) {
+            gameOver = false;
+            renderBoardInfoPanel();
+            return;
+        }
+        gameOver = false;
+        var id;
+        var point = historyStack.pop();
+        id = "#" + point.x + "-" + point.y;
+        $(id).attr("tag", ".");
+        $(id).attr("src", "pic/blank.png");
+        resetRequestTrace();
+
+        if (historyStack.length > 0) {
+            var lastHit = historyStack[historyStack.length - 1];
+            moveHint(lastHit.x, lastHit.y);
+        } else {
+            hiddenHint();
+        }
+        maybeSubmitNextAiTurn();
+        renderBoardInfoPanel();
+    }
+
+    function setColor(x, y, color, source) {
+        if (source === undefined) {
+            source = "manual";
+        }
+        if (color != "×" && color != "●") {
+            setFrontendError("frontend", "invalid_color", color);
+            renderBoardInfoPanel();
+            return false;
+        }
+        if (!isInBoard(x, y)) {
+            setFrontendError("frontend", "out_of_board_move", "(" + x + ", " + y + ")");
+            renderBoardInfoPanel();
+            return false;
+        }
+        if (!isEmptyPoint(x, y)) {
+            setFrontendError("frontend", "occupied_move", position2move(x, y));
+            renderBoardInfoPanel();
+            return false;
+        }
+        var id = "#" + x + "-" + y;
+        if (color == "×") {
+            $(id).attr("tag", color);
+            $(id).attr("src", "pic/black.png");
+        }
+        if (color == "●") {
+            $(id).attr("tag", color);
+            $(id).attr("src", "pic/white.png");
+        }
+        moveHint(x, y);
+        var point = {
+            "x": x,
+            "y": y
+        }
+        historyStack.push(point);
+        if (source != "ai_response") {
+            lastSubmittedPayload = null;
+            lastResponsePayload = null;
+            lastRequestError = null;
+            lastRoundTripMs = null;
+        }
+        winCheck(historyStack);
+        renderBoardInfoPanel();
+        return true;
+    }
+
+    function getOtherColor(color) {
+        if (color == "WHITE") {
+            return "BLACK";
+        }
+        if (color == "BLACK") {
+            return "WHITE";
+        }
+        return null;
+    }
+
+    function getColorChar(color) {
+        if (color == "WHITE") {
+            return "●";
+        }
+        if (color == "BLACK") {
+            return "×";
+        }
+        return null;
+    }
+
+    function updateModeIndicator() {
+        $("#black-ai-button").text(blackAiEnabled ? "取消执黑（Stop AI Black）" : "机器执黑（AI Black）");
+        $("#white-ai-button").text(whiteAiEnabled ? "取消执白（Stop AI White）" : "机器执白（AI White）");
+        renderBoardInfoPanel();
+    }
+
+    function maybeSubmitNextAiTurn() {
+        if (gameOver || thinking || whiteThinking) {
+            return false;
+        }
+        if (blackAiEnabled && historyStack.length % 2 == 0) {
+            submit();
+            return true;
+        }
+        if (whiteAiEnabled && historyStack.length % 2 == 1) {
+            submitWhite();
+            return true;
+        }
+        return false;
+    }
+
+    function toggleBlackAi() {
+        if (blackAiEnabled) {
+            blackAiEnabled = false;
+            cancelBlackRequest();
+            updateModeIndicator();
+            return;
+        }
+        if (thinking || whiteThinking) {
+            alert("正在计算中...请稍后");
+            return;
+        }
+        blackAiEnabled = true;
+        updateModeIndicator();
+        maybeSubmitNextAiTurn();
+    }
+
+    function toggleWhiteAi() {
+        if (whiteAiEnabled) {
+            whiteAiEnabled = false;
+            cancelWhiteRequest();
+            updateModeIndicator();
+            return;
+        }
+        if (thinking || whiteThinking) {
+            alert("正在计算中...请稍后");
+            return;
+        }
+        whiteAiEnabled = true;
+        updateModeIndicator();
+        maybeSubmitNextAiTurn();
+    }
+
+    function onClickCube(obj) {
+        if (gameOver) {
+            return;
+        }
+        var id = obj.id;
+        var x = parseInt(id.split("-")[0]);
+        var y = parseInt(id.split("-")[1]);
+        if ($("#" + id).attr("tag") == ".") {
+            var color = "WHITE";
+            if(historyStack.length % 2 == 0){
+                color = "BLACK";
+            }
+            if ((color == "BLACK" && blackAiEnabled) || (color == "WHITE" && whiteAiEnabled)) {
+                return;
+            }
+            if (thinking || whiteThinking) {
+                alert("正在计算中...请稍后");
+                return;
+            }
+            if (!setColor(x, y, getColorChar(color))) {
+                return;
+            }
+            if (gameOver) {
+                return;
+            }
+            maybeSubmitNextAiTurn();
+        }
+    }
+
+    function getLocation(x, y) {
+        var boundary = 17;
+        var between = 29;
+        var size = 25;
+        var left = between * x + boundary;
+        var top = between * y + boundary;
+        return "position:absolute;left:" + left + "px;top:" + top + "px;width:" + size + "px;height:" + size + "px"
+    }
+
+    function moveHint(x, y) {
+        $("#hint").removeAttr("hidden");
+        $("#hint").attr("style", getLocation(x, y));
+        $("#hint").attr("style", getLocation(x, y));
+    }
+
+    function hiddenHint() {
+        $("#hint").attr("hidden", "hidden");
+    }
+
+    function applyAiMove(data, color) {
+        if (gameOver) {
+            return false;
+        }
+        if (data == null || data == "") {
+            setFrontendError("frontend", "empty_ai_response", data);
+            return false;
+        }
+        if (data.x === undefined || data.y === undefined || data.x === null || data.y === null || data.x === "" || data.y === "") {
+            setFrontendError("frontend", "missing_ai_coordinates", JSON.stringify(data));
+            return false;
+        }
+        var x = Number(data.x);
+        var y = Number(data.y);
+        if (!isInBoard(x, y)) {
+            setFrontendError("frontend", "invalid_ai_coordinates", JSON.stringify(data));
+            return false;
+        }
+        if (!isEmptyPoint(x, y)) {
+            setFrontendError("frontend", "ai_returned_occupied_move", position2move(x, y));
+            return false;
+        }
+        return setColor(x, y, getColorChar(color), "ai_response");
+    }
+
+    function submit() {
+        if (!blackAiEnabled || thinking || whiteThinking || gameOver) {
+            return;
+        }
+        if (historyStack.length % 2 != 0) {
+            return;
+        }
+        var stepsString = historyStack2stepsString(historyStack);
+        var params = {
+            "stepsString": stepsString,
+            "color": aiColor,
+            "level": level,
+            "gameId": gameId,
+            "target": blackAiTarget
+        }
+
+        thinking = true;
+        var requestId = ++blackRequestId;
+        lastSubmittedPayload = {
+            "url": "/next_step",
+            "stepsString": params.stepsString,
+            "color": params.color,
+            "level": params.level,
+            "gameId": params.gameId,
+            "target": params.target
+        };
+        lastRequestError = null;
+        lastRoundTripMs = null;
+        var requestStartedAt = new Date().getTime();
+        renderBoardInfoPanel();
+        blackRequestXhr = $.ajax({
+            type: "GET",
+            url: "/next_step",
+            data: params,
+            datatype: "json",
+            success: function (data) {
+                if (requestId != blackRequestId) {
+                    return;
+                }
+                lastRoundTripMs = new Date().getTime() - requestStartedAt;
+                lastResponsePayload = data;
+                currentBlackEngine = data.active_black_engine || data.current_black_engine || data.black_engine || currentBlackEngine;
+                currentBlackFallbackReason = data.fallback_reason || null;
+                thinking = false;
+                if (!blackAiEnabled || historyStack2stepsString(historyStack) != params.stepsString || historyStack.length % 2 != 0) {
+                    renderBoardInfoPanel();
+                    return;
+                }
+                if (data != null && data != "") {
+                    applyAiMove(data, aiColor);
+                } else {
+                    setFrontendError("frontend", "empty_ai_response", data);
+                }
+                if (!maybeSubmitNextAiTurn()) {
+                    renderBoardInfoPanel();
+                }
+            },
+            error: function (xhr, status, error) {
+                if (requestId != blackRequestId) {
+                    return;
+                }
+                lastRoundTripMs = new Date().getTime() - requestStartedAt;
+                lastRequestError = {
+                    "status": status,
+                    "error": error,
+                    "responseText": xhr != null ? xhr.responseText : null
+                };
+                thinking = false;
+                renderBoardInfoPanel();
+            },
+            complete: function () {
+                if (requestId == blackRequestId) {
+                    blackRequestXhr = null;
+                }
+            }
+        });
+    }
+
+    function submitWhite() {
+        if (!whiteAiEnabled || whiteThinking || thinking || gameOver) {
+            return;
+        }
+        if (historyStack.length % 2 != 1) {
+            return;
+        }
+        var stepsString = historyStack2stepsString(historyStack);
+        var params = {
+            "stepsString": stepsString,
+            "color": "WHITE",
+            "level": level,
+            "gameId": gameId,
+            "target": whiteAiTarget,
+            "opponent": getWhiteAiOpponent()
+        }
+
+        whiteThinking = true;
+        var requestId = ++whiteRequestId;
+        lastSubmittedPayload = {
+            "url": "/white_next_step",
+            "stepsString": params.stepsString,
+            "color": params.color,
+            "level": params.level,
+            "gameId": params.gameId,
+            "target": params.target,
+            "opponent": params.opponent
+        };
+        lastRequestError = null;
+        lastRoundTripMs = null;
+        var requestStartedAt = new Date().getTime();
+        renderBoardInfoPanel();
+        whiteRequestXhr = $.ajax({
+            type: "GET",
+            url: "/white_next_step",
+            data: params,
+            datatype: "json",
+            success: function (data) {
+                if (requestId != whiteRequestId) {
+                    return;
+                }
+                lastRoundTripMs = new Date().getTime() - requestStartedAt;
+                lastResponsePayload = data;
+                whiteThinking = false;
+                if (!whiteAiEnabled || historyStack2stepsString(historyStack) != params.stepsString || historyStack.length % 2 != 1) {
+                    renderBoardInfoPanel();
+                    return;
+                }
+                if (data != null && data != "") {
+                    applyAiMove(data, "WHITE");
+                } else {
+                    setFrontendError("frontend", "empty_ai_response", data);
+                }
+                if (!maybeSubmitNextAiTurn()) {
+                    renderBoardInfoPanel();
+                }
+            },
+            error: function (xhr, status, error) {
+                if (requestId != whiteRequestId) {
+                    return;
+                }
+                lastRoundTripMs = new Date().getTime() - requestStartedAt;
+                lastRequestError = {
+                    "status": status,
+                    "error": error,
+                    "responseText": xhr != null ? xhr.responseText : null
+                };
+                whiteThinking = false;
+                renderBoardInfoPanel();
+            },
+            complete: function () {
+                if (requestId == whiteRequestId) {
+                    whiteRequestXhr = null;
+                }
+            }
+        });
+    }
+
+    function point2str(point){
+        return point.x + "," + point.y;
+    }
+
+    function winCheckForOneSide(oneSideArr){
+        let mySet = new Set(); // use string as the element, so that it can be retrieved natively
+        let dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+        for(var i = 0; i < oneSideArr.length; i++){
+            mySet.add(point2str(oneSideArr[i]));
+        }
+        for(var x = 0; x < 15; x++){
+            for(var y = 0; y < 15; y++){
+                if(mySet.has(point2str({x: x, y: y}))){
+                    for(var d = 0; d < dirs.length; d++){
+                        var w = true;
+                        for(var c = 1; c < 5; c++){
+                            var next_point = {x: x + dirs[d][0]*c, y: y + dirs[d][1]*c};
+                            if(!mySet.has(point2str(next_point))){
+                                w = false;
+                                break;
+                            }
+                        }
+                        if(w){return true;}
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    console.assert(!winCheckForOneSide([{x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}]));
+    console.assert(winCheckForOneSide([{x: 7, y: 0}, {x: 7, y: 1}, {x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}]));
+
+    function winCheck(historyArr) {
+    /*
+    first is black, second is white etc
+    */
+        var blackArr = Array();
+        var whiteArr = Array();
+        for(var i = 0; i < historyArr.length; i++){
+            if(i % 2 == 0){
+                blackArr.push(historyArr[i]);
+            }else{
+                whiteArr.push(historyArr[i]);
+            }
+        }
+        console.log("white length " + whiteArr.length);
+        if (winCheckForOneSide(blackArr)) {
+            gameOver = true;
+            thinking = false;
+            whiteThinking = false;
+            alert("黑棋胜利");
+            return true;
+        }
+        if (winCheckForOneSide(whiteArr)) {
+            gameOver = true;
+            thinking = false;
+            whiteThinking = false;
+            alert("白棋胜利");
+            return true;
+        }
+        return false;
+    }
+
+    function guid() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    // Update the statement of service end
+    // Get the current date
+
+
+</script>
+</html>
