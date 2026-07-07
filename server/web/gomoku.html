@@ -3,23 +3,104 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Gomoku</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gokumoku</title>
     <script src="js/jquery.js"></script>
+    <style>
+        .app-shell {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        #board-stage {
+            position: relative;
+            width: 450px;
+            height: 450px;
+            transform-origin: top left;
+        }
+
+        #board-frame {
+            width: 450px;
+            height: 450px;
+        }
+
+        #board-scroll {
+            max-width: 100%;
+            overflow: hidden;
+        }
+
+        .controls {
+            margin-top: 8px;
+        }
+
+        .side-panel {
+            min-width: 320px;
+            max-width: 680px;
+            flex: 1;
+        }
+
+        .info-table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0 0 12px 0;
+            table-layout: fixed;
+        }
+
+        .info-table thead th {
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            padding: 6px 8px;
+            text-align: left;
+        }
+
+        .info-table tbody th {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            text-align: left;
+            vertical-align: top;
+            width: 220px;
+        }
+
+        .info-table td {
+            border: 1px solid #ccc;
+            padding: 6px 8px;
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        @media (max-width: 520px) {
+            .info-table tbody th {
+                width: 120px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-    <img id="hint" src="pic/line.png" hidden="hidden">
-    <div id="cubes">
-    </div>
-    <img src="pic/board.jpg" width="450px" height="450px">
-    <div>
-        <button onclick="rollback();" type="button">悔棋 (BACK)</button>
-        <button onclick="start();" type="button">重新开始 (RESTART)</button>
-        <button id="black-ai-button" onclick="toggleBlackAi();" type="button">取消执黑（Stop AI Black）</button>
-        <button id="white-ai-button" onclick="toggleWhiteAi();" type="button">机器执白（AI White）</button>
-    </div>
-    <hr/>
-    <div id="board-info-panel" style="font-family: Arial, sans-serif;"></div>
+    <main class="app-shell">
+        <section class="play-area">
+            <div id="board-scroll">
+                <div id="board-frame">
+                    <div id="board-stage">
+                        <img id="hint" src="pic/line.png" hidden="hidden">
+                        <div id="cubes"></div>
+                        <img src="pic/board.jpg" width="450px" height="450px">
+                    </div>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="rollback();" type="button">悔棋 (Back)</button>
+                <button onclick="start();" type="button">重新开始 (Restart)</button>
+                <button id="black-ai-button" onclick="toggleBlackAi();" type="button">取消执黑 (Stop AI Black)</button>
+                <button id="white-ai-button" onclick="toggleWhiteAi();" type="button">机器执白 (AI White)</button>
+            </div>
+        </section>
+        <section class="side-panel">
+            <div id="board-info-panel"></div>
+        </section>
+    </main>
 </body>
 <script>
     var steps_string = normalizeStepsString(findGetParameter("init_steps"));
@@ -44,14 +125,48 @@
     var lastRequestError = null;
     var lastRoundTripMs = null;
     var whiteAiTarget = "auto";
-    var whiteAiOpponent = "fucusy";
+    var whiteAiOpponent = "proof_tree";
     var blackAiTarget = "auto";
     var blackRequestId = 0;
     var whiteRequestId = 0;
     var blackRequestXhr = null;
     var whiteRequestXhr = null;
-    var currentBlackEngine = "fucusy_black";
+    var currentBlackEngine = "proof_tree_black";
     var currentBlackFallbackReason = null;
+    var boardSize = 450;
+    var boardLineX = [18.5, 48, 77, 106, 136, 166, 195, 225, 254, 284, 313, 342, 372, 401, 431.5];
+    var boardLineY = [18.5, 48, 77, 107, 136, 166, 195, 224, 254, 283, 314, 342, 371, 401, 430.5];
+    var pieceSize = 25;
+
+    var engineLabels = {
+        "proof_tree_black": "证明树黑棋引擎 (Proof-Tree Black)",
+        "general_search_black": "通用搜索黑棋引擎 (General-Search Black)"
+    };
+    var targetLabels = {
+        "auto": "自动策略 (Auto)",
+        "proof_tree": "证明树对手模型 (Proof-Tree Model)",
+        "general_search": "通用搜索对手模型 (General-Search Model)",
+        "generic": "通用策略 (Generic)",
+        "gomocup": "Gomocup 引擎池",
+        "ensemble": "经验库集成 (Ensemble)",
+        "advisor": "单引擎建议 (Single Engine)",
+        "advisor_ensemble": "多引擎建议 (Engine Ensemble)"
+    };
+    var sourceLabels = {
+        "opening_default": "标准开局",
+        "leveldb": "证明数据库",
+        "web_search": "证明搜索",
+        "general_search_black": "通用搜索黑棋",
+        "white_hybrid": "白棋混合决策",
+        "white_advisor": "白棋单引擎建议",
+        "white_advisor_ensemble": "白棋多引擎建议",
+        "white_gomocup_direct": "白棋外部引擎直连",
+        "white_auto_direct_exact_book": "白棋经验库命中"
+    };
+    var fallbackReasonLabels = {
+        "first_black_is_not_h8": "首手不是天元，改用通用搜索",
+        "proof_tree_no_legal_move": "证明树没有可用合法延续，改用通用搜索"
+    };
 
     var content = "";
     for (var i = 0; i < 15; i++) {
@@ -63,7 +178,10 @@
     }
     $("#cubes").html(content);
 
+    updateBoardScale();
+    window.addEventListener("resize", updateBoardScale);
     start();
+
     function findGetParameter(parameterName) {
         var result = null,
             tmp = [];
@@ -165,7 +283,7 @@
 
     function resetRuntimeStatus() {
         resetRequestTrace();
-        currentBlackEngine = "fucusy_black";
+        currentBlackEngine = "proof_tree_black";
         currentBlackFallbackReason = null;
     }
 
@@ -209,7 +327,7 @@
             return value.length > 0 ? escapeHtml(value.join(", ")) : "(空)";
         }
         if (typeof value === "object") {
-            return escapeHtml(JSON.stringify(value));
+            return "<span class='muted'>包含 " + Object.keys(value).length + " 个字段</span>";
         }
         return escapeHtml(String(value));
     }
@@ -218,13 +336,94 @@
         return value ? "是" : "否";
     }
 
+    function normalizeBlackEngine(value) {
+        value = value == null ? "" : String(value).toLowerCase();
+        if (value.indexOf("general_search") >= 0 || value.indexOf("search_black") >= 0) {
+            return "general_search_black";
+        }
+        if (value.indexOf("proof_tree") >= 0 || value.indexOf("leveldb") >= 0 || value.indexOf("web_search") >= 0) {
+            return "proof_tree_black";
+        }
+        return value || "proof_tree_black";
+    }
+
+    function formatEngine(value) {
+        var id = normalizeBlackEngine(value);
+        return formatValue(engineLabels[id] || id);
+    }
+
+    function formatTarget(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        var id = String(value);
+        return formatValue(targetLabels[id] || id);
+    }
+
+    function formatSource(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        var id = String(value);
+        return formatValue(sourceLabels[id] || id.replace(/_/g, " "));
+    }
+
+    function formatFallbackReason(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        var id = String(value);
+        if (id.indexOf("proof_tree_black_exception") == 0) {
+            return formatValue("证明树异常，改用通用搜索");
+        }
+        return formatValue(fallbackReasonLabels[id] || id.replace(/_/g, " "));
+    }
+
+    function formatDecisionStatus(value) {
+        if (value === null || value === undefined || value === "") {
+            return "-";
+        }
+        var statusLabels = {
+            "white_immediate_win": "白棋直接成五",
+            "advisor_ensemble": "多引擎建议",
+            "advisor_votes": "引擎投票",
+            "base_db_escape_candidate": "证明树外候选",
+            "base_db_miss_untrusted": "未确认的证明树外候选",
+            "must_block_five": "必须挡五",
+            "block_open_four": "挡活四",
+            "block_closed_four": "挡冲四",
+            "white_open_four": "白棋活四",
+            "white_closed_four": "白棋冲四",
+            "allows_black_immediate_win": "会放黑棋直接胜",
+            "allows_black_two_step_threat": "会放黑棋两步威胁",
+            "low_relevance": "低相关候选",
+            "local_rapfi_best": "本地强搜索首选",
+            "local_rapfi_principal": "本地主变化",
+            "rapfi_best": "强搜索首选",
+            "rapfi_principal": "强搜索主变化",
+            "generic_rapfi_tactical": "通用战术评估",
+            "black_db_miss_escape_candidate": "脱离证明树候选",
+            "black_db_miss_untrusted": "未确认脱离证明树"
+        };
+        var parts = String(value).split("+").map(function (part) {
+            if (part.indexOf("base_book:") == 0 || part.indexOf("ensemble_book:") == 0) {
+                return part.replace("base_book:", "经验库命中：").replace("ensemble_book:", "集成经验库：");
+            }
+            if (part.indexOf("auto_direct_exact_book:") == 0) {
+                return part.replace("auto_direct_exact_book:", "自动经验库：");
+            }
+            return statusLabels[part] || part.replace(/_/g, " ");
+        });
+        return formatValue(parts.join("；"));
+    }
+
     function buildInfoTable(title, rows) {
-        var html = "<table style='border-collapse:collapse;width:100%;margin:0 0 12px 0;table-layout:fixed;'>";
-        html += "<thead><tr><th colspan='2' style='border:1px solid #ccc;background:#f5f5f5;padding:6px 8px;text-align:left;'>" + escapeHtml(title) + "</th></tr></thead><tbody>";
+        var html = "<table class='info-table'>";
+        html += "<thead><tr><th colspan='2'>" + escapeHtml(title) + "</th></tr></thead><tbody>";
         for (var i = 0; i < rows.length; i++) {
             html += "<tr>";
-            html += "<th style='border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;width:220px;'>" + escapeHtml(rows[i][0]) + "</th>";
-            html += "<td style='border:1px solid #ccc;padding:6px 8px;vertical-align:top;word-break:break-word;'>" + rows[i][1] + "</td>";
+            html += "<th>" + escapeHtml(rows[i][0]) + "</th>";
+            html += "<td>" + rows[i][1] + "</td>";
             html += "</tr>";
         }
         html += "</tbody></table>";
@@ -261,10 +460,10 @@
     }
 
     function getWhiteAiOpponent() {
-        if ((currentBlackEngine || "").indexOf("calculator") >= 0) {
-            return "calculator";
+        if (normalizeBlackEngine(currentBlackEngine) == "general_search_black") {
+            return "general_search";
         }
-        return "fucusy";
+        return "proof_tree";
     }
 
     function renderBoardInfoPanel() {
@@ -283,17 +482,17 @@
         var requestRows = [
             ["最近请求接口", formatValue(lastSubmittedPayload ? lastSubmittedPayload.url : (currentRequestPayload ? currentRequestPayload.url : null))],
             ["请求颜色", formatValue(lastSubmittedPayload ? lastSubmittedPayload.color : (currentRequestPayload ? currentRequestPayload.color : null))],
-            ["请求目标", formatValue(lastSubmittedPayload ? lastSubmittedPayload.target : (currentRequestPayload ? currentRequestPayload.target : null))],
-            ["请求对手", formatValue(lastSubmittedPayload ? lastSubmittedPayload.opponent : (currentRequestPayload ? currentRequestPayload.opponent : null))]
+            ["请求目标", formatTarget(lastSubmittedPayload ? lastSubmittedPayload.target : (currentRequestPayload ? currentRequestPayload.target : null))],
+            ["请求对手", formatTarget(lastSubmittedPayload ? lastSubmittedPayload.opponent : (currentRequestPayload ? currentRequestPayload.opponent : null))]
         ];
 
         var responseRows = [
-            ["最近后端来源", formatValue(responseSummary ? responseSummary.source : (lastResponsePayload ? lastResponsePayload.source : null))],
-            ["当前黑棋", formatValue(currentBlackEngine)],
-            ["黑棋 fallback 原因", formatValue(currentBlackFallbackReason)],
+            ["最近后端来源", formatSource(responseSummary ? responseSummary.source : (lastResponsePayload ? lastResponsePayload.source : null))],
+            ["当前黑棋", formatEngine(currentBlackEngine)],
+            ["黑棋切换原因", formatFallbackReason(currentBlackFallbackReason)],
             ["后端返回落子", formatValue(responseSummary ? responseSummary.selected_move : (lastResponsePayload ? lastResponsePayload.selected_move : null))],
-            ["白棋目标", formatValue(responseSummary ? responseSummary.target : (lastResponsePayload ? lastResponsePayload.target : null))],
-            ["选择状态", formatValue(responseSummary ? responseSummary.status : (lastResponsePayload && lastResponsePayload.chosen ? lastResponsePayload.chosen.status : null))],
+            ["白棋目标", formatTarget(responseSummary ? responseSummary.target : (lastResponsePayload ? lastResponsePayload.target : null))],
+            ["选择状态", formatDecisionStatus(responseSummary ? responseSummary.status : (lastResponsePayload && lastResponsePayload.chosen ? lastResponsePayload.chosen.status : null))],
             ["最近一次请求耗时(ms)", formatValue(lastRoundTripMs)]
         ];
 
@@ -506,12 +705,9 @@
     }
 
     function getLocation(x, y) {
-        var boundary = 17;
-        var between = 29;
-        var size = 25;
-        var left = between * x + boundary;
-        var top = between * y + boundary;
-        return "position:absolute;left:" + left + "px;top:" + top + "px;width:" + size + "px;height:" + size + "px"
+        var left = boardLineX[x] - pieceSize / 2;
+        var top = boardLineY[y] - pieceSize / 2;
+        return "position:absolute;left:" + left + "px;top:" + top + "px;width:" + pieceSize + "px;height:" + pieceSize + "px"
     }
 
     function moveHint(x, y) {
@@ -522,6 +718,19 @@
 
     function hiddenHint() {
         $("#hint").attr("hidden", "hidden");
+    }
+
+    function updateBoardScale() {
+        var frame = document.getElementById("board-frame");
+        var stage = document.getElementById("board-stage");
+        if (frame == null || stage == null) {
+            return;
+        }
+        var available = Math.min(boardSize, Math.max(240, document.documentElement.clientWidth - 16));
+        var scale = available / boardSize;
+        frame.style.width = available + "px";
+        frame.style.height = available + "px";
+        stage.style.transform = "scale(" + scale + ")";
     }
 
     function applyAiMove(data, color) {
@@ -590,7 +799,7 @@
                 }
                 lastRoundTripMs = new Date().getTime() - requestStartedAt;
                 lastResponsePayload = data;
-                currentBlackEngine = data.active_black_engine || data.current_black_engine || data.black_engine || currentBlackEngine;
+                currentBlackEngine = normalizeBlackEngine(data.active_black_engine || data.source || currentBlackEngine);
                 currentBlackFallbackReason = data.fallback_reason || null;
                 thinking = false;
                 if (!blackAiEnabled || historyStack2stepsString(historyStack) != params.stepsString || historyStack.length % 2 != 0) {

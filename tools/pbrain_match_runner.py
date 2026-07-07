@@ -18,16 +18,16 @@ PBRAIN_MEMORY_BYTES = 536870912
 WHITE_TARGET_CHOICES = [
     "auto",
     "none",
-    "fucusy",
-    "calculator",
+    "proof_tree",
+    "general_search",
     "generic",
     "gomocup",
     "vibefive",
     "jax",
     "katagomo",
     "ensemble",
-    "teacher",
-    "teacher_ensemble",
+    "advisor",
+    "advisor_ensemble",
     "gomocup_top",
     "rapfi25",
     "katagomo26_f15",
@@ -322,16 +322,18 @@ class PBrainPlayer:
 
 def resolve_auto_target(black_spec):
     black_spec = black_spec.lower()
-    if black_spec == "http_fucusy":
-        return "fucusy"
+    if black_spec in ("http_proof_tree_black", "http_black"):
+        return "proof_tree"
     if "alphagomoku" in black_spec:
         return "gomocup"
     if "rapfi" in black_spec:
-        return "calculator"
+        return "general_search"
+    if "general_search" in black_spec or "search_black" in black_spec:
+        return "general_search"
     if "vibefive" in black_spec:
         return "vibefive"
     if "chloris" in black_spec:
-        return "calculator"
+        return "general_search"
     if "katagomo" in black_spec:
         return "katagomo"
     if "jax" in black_spec:
@@ -339,7 +341,7 @@ def resolve_auto_target(black_spec):
     return "gomocup"
 
 
-def use_teacher_ensemble_for_auto(black_spec):
+def use_advisor_ensemble_for_auto(black_spec):
     black_spec = black_spec.lower()
     return any(
         name in black_spec
@@ -357,7 +359,7 @@ def use_teacher_ensemble_for_auto(black_spec):
     )
 
 
-def resolve_auto_white_route(black_spec):
+def resolve_auto_white_target(black_spec):
     black_spec = black_spec.lower()
     if "alphagomoku" in black_spec:
         return "jax25", None
@@ -370,15 +372,15 @@ def resolve_auto_white_route(black_spec):
     if any(name in black_spec for name in ("katagomo", "pentazen")):
         return "alphagomoku_mk26", None
     base_target = resolve_auto_target(black_spec)
-    if use_teacher_ensemble_for_auto(black_spec):
-        return "teacher_ensemble", base_target
+    if use_advisor_ensemble_for_auto(black_spec):
+        return "advisor_ensemble", base_target
     return base_target, None
 
 
 def make_player(spec, color, args):
-    if spec == "http_fucusy":
+    if spec in ("http_proof_tree_black", "http_black"):
         return HttpPlayer(
-            "http_fucusy",
+            "http_proof_tree_black",
             BLACK,
             args.http_base,
             args.depth,
@@ -386,21 +388,21 @@ def make_player(spec, color, args):
             args.turn_time_ms,
             request_timeout=args.http_timeout,
         )
-    if spec == "http_hybrid":
+    if spec in ("http_gokumoku_white", "http_white"):
         if args.white_target == "auto":
             target = "auto"
             base_target = None
         elif args.white_target == "none":
             target = None
             base_target = None
-        elif args.white_target == "teacher_ensemble":
-            target = "teacher_ensemble"
+        elif args.white_target == "advisor_ensemble":
+            target = "advisor_ensemble"
             base_target = resolve_auto_target(args.black)
         else:
             target = args.white_target
             base_target = None
         player = HttpPlayer(
-            "http_hybrid",
+            "http_gokumoku_white",
             WHITE,
             args.http_base,
             args.depth,

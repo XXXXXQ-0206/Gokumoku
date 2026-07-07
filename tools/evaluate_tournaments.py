@@ -10,7 +10,10 @@ KNOWN_GOMOCUP_ELO = {
     "katagomo26_f15": 2879,
     "alphagomoku_mk26": 2781,
     "jax25": 2662,
-    "embryo26_f": 2402,
+    "embryo26_f": 2372,
+    "vibefive26": 2172,
+    "pentazen21_15": 2171,
+    "yixin18": 2217,
 }
 
 

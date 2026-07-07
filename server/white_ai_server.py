@@ -28,16 +28,21 @@ WHITE_RAPFI_MS = int(os.environ.get("WHITE_RAPFI_MS", os.environ.get("WHITE_TURN
 WHITE_RAPFI_DEPTH = int(os.environ.get("WHITE_RAPFI_DEPTH", "64"))
 WHITE_RAPFI_THREADS = int(os.environ.get("WHITE_RAPFI_THREADS", "4"))
 WHITE_RAPFI_HASH_KB = int(os.environ.get("WHITE_RAPFI_HASH_KB", "131072"))
-CALCULATOR_BLACK_MS = int(os.environ.get("CALCULATOR_BLACK_MS", os.environ.get("CALCULATOR_TURN_TIME_MS", "5000")))
-CALCULATOR_BLACK_DEPTH = int(os.environ.get("CALCULATOR_BLACK_DEPTH", "64"))
-CALCULATOR_BLACK_THREADS = int(os.environ.get("CALCULATOR_BLACK_THREADS", "4"))
-CALCULATOR_BLACK_HASH_KB = int(os.environ.get("CALCULATOR_BLACK_HASH_KB", "131072"))
-CALCULATOR_BLACK_CAND_RANGE = int(os.environ.get("CALCULATOR_BLACK_CAND_RANGE", "3"))
+SEARCH_BLACK_MS = int(
+    os.environ.get(
+        "SEARCH_BLACK_MS",
+        os.environ.get("SEARCH_TURN_TIME_MS", "5000"),
+    )
+)
+SEARCH_BLACK_DEPTH = int(os.environ.get("SEARCH_BLACK_DEPTH", "64"))
+SEARCH_BLACK_THREADS = int(os.environ.get("SEARCH_BLACK_THREADS", "4"))
+SEARCH_BLACK_HASH_KB = int(os.environ.get("SEARCH_BLACK_HASH_KB", "131072"))
+SEARCH_BLACK_CAND_RANGE = int(os.environ.get("SEARCH_BLACK_CAND_RANGE", "3"))
 GOMOCUP_ENGINE_ROOT = os.environ.get(
     "GOMOCUP_ENGINE_ROOT",
     os.path.join(PROJECT_ROOT, "engines", "gomocup"),
 )
-GOMOCUP_TEACHERS = [
+GOMOCUP_ADVISORS = [
     ("rapfi25", os.path.join(GOMOCUP_ENGINE_ROOT, "RAPFI25", "pbrain-rapfi_avx2.exe"), 350),
     ("katagomo26_f15", os.path.join(GOMOCUP_ENGINE_ROOT, "KATAGOMO26", "pbrain-katagomo_freestyle-15.exe"), 250),
     ("alphagomoku_mk26", os.path.join(GOMOCUP_ENGINE_ROOT, "ALPHAGOMOKU.MK26", "pbrain-AlphaGomoku.exe"), 170),
@@ -54,10 +59,13 @@ GOMOCUP_VOTING_EXCLUDE = {
     for name in os.environ.get("GOMOCUP_VOTING_EXCLUDE", "embryo26_f").split(",")
     if name.strip()
 }
-GOMOCUP_VOTING_TEACHERS = [teacher for teacher in GOMOCUP_TEACHERS if teacher[0] not in GOMOCUP_VOTING_EXCLUDE]
-GOMOCUP_TEACHER_MAX_WORKERS = int(os.environ.get("GOMOCUP_TEACHER_MAX_WORKERS", str(len(GOMOCUP_TEACHERS))))
-GOMOCUP_TEACHER_MEMORY_BYTES = int(os.environ.get("GOMOCUP_TEACHER_MEMORY_BYTES", "536870912"))
-GOMOCUP_TEACHER_PERSISTENT = os.environ.get("GOMOCUP_TEACHER_PERSISTENT", "1").strip().lower() not in (
+GOMOCUP_VOTING_ADVISORS = [advisor for advisor in GOMOCUP_ADVISORS if advisor[0] not in GOMOCUP_VOTING_EXCLUDE]
+GOMOCUP_ADVISOR_MAX_WORKERS = int(os.environ.get("GOMOCUP_ADVISOR_MAX_WORKERS", str(len(GOMOCUP_ADVISORS))))
+GOMOCUP_ADVISOR_MEMORY_BYTES = int(os.environ.get("GOMOCUP_ADVISOR_MEMORY_BYTES", "536870912"))
+GOMOCUP_ADVISOR_PERSISTENT = os.environ.get(
+    "GOMOCUP_ADVISOR_PERSISTENT",
+    "1",
+).strip().lower() not in (
     "0",
     "false",
     "no",
@@ -70,16 +78,18 @@ GOMOCUP_ADVERSARY_VALIDATION = os.environ.get("GOMOCUP_ADVERSARY_VALIDATION", "0
     "off",
 )
 GOMOCUP_ADVERSARY_TOP_N = int(os.environ.get("GOMOCUP_ADVERSARY_TOP_N", "4"))
-GOMOCUP_ADVERSARY_TEACHERS = int(os.environ.get("GOMOCUP_ADVERSARY_TEACHERS", "3"))
+GOMOCUP_ADVERSARY_ADVISORS = int(os.environ.get("GOMOCUP_ADVERSARY_ADVISORS", "3"))
+ENGINE_WORKERS = int(os.environ.get("ENGINE_WORKERS", "1"))
+ENGINE_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, ENGINE_WORKERS))
 
 # Benchmark-derived resistance moves. These are deliberately kept as a
 # small, explicit book so the experimental white AI can prefer verified
 # longest-resistance branches without changing either black engine.
-RESISTANCE_BOOK = {}
+GENERAL_SEARCH_RESISTANCE_BOOK = {}
 
 
 def add_resistance_line(line, bonus, tag, book=None, overwrite=False, min_prefix_len=1):
-    book = book if book is not None else RESISTANCE_BOOK
+    book = book if book is not None else GENERAL_SEARCH_RESISTANCE_BOOK
     moves = [move for move in line.strip().strip("_").split("_") if move]
     for i in range(1, len(moves), 2):
         if i < min_prefix_len:
@@ -90,39 +100,39 @@ def add_resistance_line(line, bonus, tag, book=None, overwrite=False, min_prefix
             book.setdefault(tuple(moves[:i]), (moves[i], bonus, tag))
 
 
-RESISTANCE_BOOK[("h8",)] = ("i8", 420_000, "opening_probe")
+GENERAL_SEARCH_RESISTANCE_BOOK[("h8",)] = ("i8", 420_000, "opening_probe")
 
 add_resistance_line(
     "_h8_i8_i7_g9_j7_g7_j8_h6_j6_j5_k7_h7_l6_i9_k6_m6_l8_i5_j10_j9_l4_k5_l5_l7_m4_n3_n4_m5_k4_o4_j4",
     260_000,
-    "fucusy_book",
+    "proof_tree_book",
 )
 add_resistance_line(
     "_h8_g10_g7_i9_h7_h9_i7_j7_i8_j9_g9_j6_j8_g8_f7_e7_h6_g5_k9_l10_f10_e11_i5_j4_i4_i6_f8_e9_h5_h4_g6_j3_e8",
     300_000,
-    "fucusy_book",
+    "proof_tree_book",
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_e4_i5_g3_i4_j4_j5_h3_k4_l3_l5_g9_g7_k9_j8_f10_e11_k5_i3_i2_k7_l8_m6_n7_l6_k6_m5_n4_i9",
     520_000,
-    "calculator_win_book",
+    "general_search_win_book",
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_c1_f3_e2_e4_d4_g2_h1_c6",
     650_000,
-    "calculator_i4_win_book",
+    "general_search_i4_win_book",
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_d6_f6_e4_h9_e8_f3_e2_e3_b1_f2_f5_g3_i5_d3_h3_c3",
     720_000,
-    "calculator_i4_d6_fast_win_book",
+    "general_search_i4_d6_fast_win_book",
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_e4_c1_k7_g3_a1_f3_e2_f2_i5_f5_f6_f1",
     740_000,
-    "calculator_i4_e4_fast_win_book",
+    "general_search_i4_e4_fast_win_book",
 )
-RESISTANCE_BOOK[
+GENERAL_SEARCH_RESISTANCE_BOOK[
     (
         "h8",
         "i8",
@@ -146,80 +156,80 @@ RESISTANCE_BOOK[
         "d5",
         "e4",
     )
-] = ("c1", 740_000, "calculator_i4_e4_fast_win_book")
+] = ("c1", 740_000, "general_search_i4_e4_fast_win_book")
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_e4_d4_g7_f7_h5_a1_e6_f3_j8_k7_l7_b1_c1_e8_e5_e2_e3_e7_f8_d1_d9_e1_f1_g1_g3_h2_d6_c7_i5_f2_d2_h1_i1_j1_d7_i2_g2_h3_d8_d10_d5",
     760_000,
-    "calculator_i4_long_win_book",
+    "general_search_i4_long_win_book",
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_d6_f6_e4_h3_g3_i2_h2_f5_j1_f3_e2_f2",
     860_000,
-    "calculator_e4_h3_fast_win_book",
+    "general_search_e4_h3_fast_win_book",
     overwrite=True,
     min_prefix_len=23,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_d6_f6_c1_f3_e2_e4_d4_g2_h1_c6",
     900_000,
-    "calculator_30_fast_win_book",
+    "general_search_30_fast_win_book",
     overwrite=True,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_g6_h9_g7_f7_g5_g8_i10_h6_k7_h7_f9_g4_e6_h3_h4_j5_k4_k6_l6_i4_l7_g2",
     880_000,
-    "calculator_early_g6_h9_win_book",
+    "general_search_early_g6_h9_win_book",
     overwrite=True,
     min_prefix_len=7,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_d6_f6_f3_e8_f10_c5_c1_d4_e4_e5_c3_b5_f5_a5",
     870_000,
-    "calculator_f3_e8_win_book",
+    "general_search_f3_e8_win_book",
     overwrite=True,
     min_prefix_len=23,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_c1_f7_f5_e5_d6_e4_d4_e7_d7_e6_e8_e3",
     880_000,
-    "calculator_early_c1_f5_e5_win_book",
+    "general_search_early_c1_f5_e5_win_book",
     overwrite=True,
     min_prefix_len=19,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_h9_i10_c1_e6_f9_f3_e2_f5_j8_k9_f1_h3_i2_d7",
     870_000,
-    "calculator_h9_i10_win_book",
+    "general_search_h9_i10_win_book",
     overwrite=True,
     min_prefix_len=19,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_d6_f6_e4_h3_f3_b1_e8_e5_a1_h2_h1_g3_i1_i5_k7_f2",
     870_000,
-    "calculator_h3_f3_b1_win_book",
+    "general_search_h3_f3_b1_win_book",
     overwrite=True,
     min_prefix_len=25,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_e4_c1_k7_g3_f3_f6_a1_e5_h2_d4_c3_d6_c7_d3_d7_d2",
     870_000,
-    "calculator_e4_c1_f3_f6_win_book",
+    "general_search_e4_c1_f3_f6_win_book",
     overwrite=True,
     min_prefix_len=25,
 )
 add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_h6_h7_g5_f4_g8_g4_g6_h4_i4_g7_f7_h5_e6_d5_e4_c1_a1_j5_e5_k4_l3_e7_k7_l5_b1_f3_e2_e3_d1_i5_k5_g3_f2_d3_h3_c3",
     870_000,
-    "calculator_e4_c1_a1_j5_win_book",
+    "general_search_e4_c1_a1_j5_win_book",
     overwrite=True,
     min_prefix_len=23,
 )
 add_resistance_line(
     "_h8_f6_i7_g5_i8_f8",
     220_000,
-    "fucusy_probe",
+    "proof_tree_probe",
 )
-RESISTANCE_BOOK[
+GENERAL_SEARCH_RESISTANCE_BOOK[
     (
         "h8",
         "f6",
@@ -241,18 +251,18 @@ RESISTANCE_BOOK[
         "f4",
         "i7",
     )
-] = ("e3", 200_000, "calculator_probe")
+] = ("e3", 200_000, "general_search_probe")
 
-FUCUSY_RESISTANCE_BOOK = dict(RESISTANCE_BOOK)
-FUCUSY_RESISTANCE_BOOK[("h8",)] = ("g6", 900_000, "fucusy_g6_longest_probe")
+PROOF_TREE_RESISTANCE_BOOK = dict(GENERAL_SEARCH_RESISTANCE_BOOK)
+PROOF_TREE_RESISTANCE_BOOK[("h8",)] = ("g6", 900_000, "proof_tree_g6_longest_probe")
 add_resistance_line(
     "_h8_g6_g9_i7_h9_h7_i9_j9_i8_j7_g7_j10_j8_g8_f9_e9_h10_k7_l7_f8_h11_h12_g11_f12_i12_g10_l8_k8_l9_l10_i11_i10_f11_j11_e11",
     880_000,
-    "fucusy_g6_longest_probe",
-    book=FUCUSY_RESISTANCE_BOOK,
+    "proof_tree_g6_longest_probe",
+    book=PROOF_TREE_RESISTANCE_BOOK,
 )
 
-VIBEFIVE_RESISTANCE_BOOK = dict(RESISTANCE_BOOK)
+VIBEFIVE_RESISTANCE_BOOK = dict(GENERAL_SEARCH_RESISTANCE_BOOK)
 VIBEFIVE_RESISTANCE_BOOK[("h8",)] = ("g8", 900_000, "vibefive_h8_g8_longer_probe")
 VIBEFIVE_RESISTANCE_BOOK[("h8", "i8", "j9", "i9", "h10")] = (
     "g10",
@@ -275,7 +285,7 @@ add_resistance_line(
     min_prefix_len=5,
 )
 
-JAX_RESISTANCE_BOOK = dict(FUCUSY_RESISTANCE_BOOK)
+JAX_RESISTANCE_BOOK = dict(PROOF_TREE_RESISTANCE_BOOK)
 JAX_RESISTANCE_BOOK[("g8",)] = ("h6", 900_000, "jax_g8_h6_31_probe")
 JAX_RESISTANCE_BOOK[("h8",)] = ("j9", 920_000, "jax_h8_j9_33_probe")
 JAX_RESISTANCE_BOOK[("h7",)] = ("g9", 900_000, "jax_h7_g9_35_probe")
@@ -384,7 +394,7 @@ JAX_RESISTANCE_BOOK[
 JAX_RESISTANCE_BOOK[("i9",)] = ("j10", 860_000, "jax_first_i9_j10_29_probe")
 JAX_RESISTANCE_BOOK[("j8",)] = ("k7", 880_000, "jax_first_j8_k7_31_probe")
 
-KATAGOMO_RESISTANCE_BOOK = dict(FUCUSY_RESISTANCE_BOOK)
+KATAGOMO_RESISTANCE_BOOK = dict(PROOF_TREE_RESISTANCE_BOOK)
 KATAGOMO_RESISTANCE_BOOK[("i7",)] = ("j6", 900_000, "katagomo_i7_j6_29_probe")
 add_resistance_line(
     "_i7_j6_i8_i9_h7_g7_j7_k7_h9_k6_h8_h6_h10_h11_g6_j9_i10_g10_g8_l6_i6_j8_m5_m6_n6_f7_j5_k4_f9",
@@ -409,7 +419,7 @@ OFFICIAL_F15_OPENING2_BOOK = {
     ("h8", "i7", "k10", "g7", "k7", "g8", "g6"): ("h7", 950_000, "official_f15_opening2_h7_consensus"),
     ("h8", "i7", "k10", "g7", "k7", "g8", "g6", "h7", "f7"): ("i6", 950_000, "official_f15_opening2_i6_consensus"),
 }
-for _book in (RESISTANCE_BOOK, VIBEFIVE_RESISTANCE_BOOK, JAX_RESISTANCE_BOOK, KATAGOMO_RESISTANCE_BOOK, GOMOCUP_RESISTANCE_BOOK):
+for _book in (GENERAL_SEARCH_RESISTANCE_BOOK, VIBEFIVE_RESISTANCE_BOOK, JAX_RESISTANCE_BOOK, KATAGOMO_RESISTANCE_BOOK, GOMOCUP_RESISTANCE_BOOK):
     _book.update(OFFICIAL_F15_OPENING2_BOOK)
 add_resistance_line(
     "_h8_e5_b2_f5_g5_f4_f6_h4_g4_g3_h2_f3_f2_e4_g2_e2_e3_g6_h7_c4_d3_e8_i2_j2_e7_c6_d8_c9_c5_d5_b7_c7_d6_c10_c8_f7_d9_e6_b3_g8",
@@ -422,7 +432,7 @@ add_resistance_line(
     "_h8_i8_j7_i6_i7_j6_k7_h7_g6_l7_k6_g8_f9_m6_k4_k5_j9_n5_m5_l4_l6_n4_n2_k8_o4_i9_g5_i10_g4_g3_j11_j10_h10_i11_i12_h12_k9_l10_k10_l9_l11_g11_m12_n13_h6_j8_h4_i4_f6_i3_f4_e3_d4_e4_e5_g7_d6_e6_b8_c7_d8_e7_d5_d7_f5_f7",
     920_000,
     "chloris_natural_66_win_regression",
-    book=RESISTANCE_BOOK,
+    book=GENERAL_SEARCH_RESISTANCE_BOOK,
     overwrite=True,
     min_prefix_len=19,
 )
@@ -438,51 +448,62 @@ GOMOCUP_RESISTANCE_BOOK[("h8", "e5", "f9", "f5", "g9")] = (
 )
 
 TARGET_BOOKS = {
-    "calculator": RESISTANCE_BOOK,
-    "fucusy": FUCUSY_RESISTANCE_BOOK,
+    "general_search": GENERAL_SEARCH_RESISTANCE_BOOK,
+    "proof_tree": PROOF_TREE_RESISTANCE_BOOK,
     "vibefive": VIBEFIVE_RESISTANCE_BOOK,
     "jax": JAX_RESISTANCE_BOOK,
     "katagomo": KATAGOMO_RESISTANCE_BOOK,
     "generic": {},
     "gomocup": GOMOCUP_RESISTANCE_BOOK,
     "ensemble": {},
-    "teacher": {},
-    "teacher_ensemble": {},
+    "advisor": {},
+    "advisor_ensemble": {},
     "auto": {},
 }
-DIRECT_TEACHER_TARGETS = {name for name, _exe, _weight in GOMOCUP_TEACHERS}
-DIRECT_TEACHER_ALIASES = {
+DIRECT_ADVISOR_TARGETS = {name for name, _exe, _weight in GOMOCUP_ADVISORS}
+DIRECT_ADVISOR_ALIASES = {
     "gomocup_top": "rapfi25",
 }
-for _direct_teacher_target in DIRECT_TEACHER_TARGETS:
-    TARGET_BOOKS[_direct_teacher_target] = {}
-for _direct_teacher_alias in DIRECT_TEACHER_ALIASES:
-    TARGET_BOOKS[_direct_teacher_alias] = {}
+for _direct_advisor_target in DIRECT_ADVISOR_TARGETS:
+    TARGET_BOOKS[_direct_advisor_target] = {}
+for _direct_advisor_alias in DIRECT_ADVISOR_ALIASES:
+    TARGET_BOOKS[_direct_advisor_alias] = {}
 
 ENSEMBLE_BOOKS = {
-    "calculator": RESISTANCE_BOOK,
-    "fucusy": FUCUSY_RESISTANCE_BOOK,
+    "general_search": GENERAL_SEARCH_RESISTANCE_BOOK,
+    "proof_tree": PROOF_TREE_RESISTANCE_BOOK,
     "vibefive": VIBEFIVE_RESISTANCE_BOOK,
     "jax": JAX_RESISTANCE_BOOK,
     "katagomo": KATAGOMO_RESISTANCE_BOOK,
 }
 
-DEFAULT_WHITE_TARGET = os.environ.get("WHITE_TARGET", "fucusy").lower()
-DB_REVERSE_TARGETS = {"calculator", "fucusy", "vibefive", "jax", "katagomo"}
+WHITE_TARGET_ALIASES = {
+    "proof": "proof_tree",
+    "proof_tree_black": "proof_tree",
+    "first_player": "proof_tree",
+    "first_player_win": "proof_tree",
+    "search": "general_search",
+    "search_black": "general_search",
+    "general_search_black": "general_search",
+    "rapfi": "general_search",
+}
+DEFAULT_WHITE_TARGET = os.environ.get("WHITE_TARGET", "proof_tree").lower()
+DB_REVERSE_TARGETS = {"general_search", "proof_tree", "vibefive", "jax", "katagomo"}
 AUTO_DIRECT_EXACT_BOOK_BASE_TARGETS = {"vibefive"}
-TEACHER_TARGETS = {"teacher"}
-TEACHER_ENSEMBLE_TARGETS = {"teacher_ensemble"}
+ADVISOR_TARGETS = {"advisor"}
+ADVISOR_ENSEMBLE_TARGETS = {"advisor_ensemble"}
 AUTO_TARGETS = {"auto"}
 
 
 def normalize_white_target(target):
-    target = (target or DEFAULT_WHITE_TARGET or "fucusy").strip().lower()
-    return target if target in TARGET_BOOKS else "fucusy"
+    target = (target or DEFAULT_WHITE_TARGET or "proof_tree").strip().lower()
+    target = WHITE_TARGET_ALIASES.get(target, target)
+    return target if target in TARGET_BOOKS else "proof_tree"
 
 
-def direct_teacher_spec(target):
-    target = DIRECT_TEACHER_ALIASES.get(target, target)
-    for name, exe, weight in GOMOCUP_TEACHERS:
+def direct_advisor_spec(target):
+    target = DIRECT_ADVISOR_ALIASES.get(target, target)
+    for name, exe, weight in GOMOCUP_ADVISORS:
         if name == target:
             return name, exe, weight
     return None
@@ -490,16 +511,22 @@ def direct_teacher_spec(target):
 
 def resolve_auto_base_target(opponent):
     opponent = (opponent or "").strip().lower()
-    if opponent in ("http_fucusy", "fucusy", "gomoku-first-move-always-win"):
-        return "fucusy"
+    if (
+        opponent in ("", "proof_tree", "proof_tree_black", "first_player", "first_player_win")
+        or "proof_tree" in opponent
+        or "first_player" in opponent
+    ):
+        return "proof_tree"
     if "alphagomoku" in opponent:
         return "gomocup"
     if "rapfi" in opponent:
-        return "calculator"
+        return "general_search"
+    if "general_search" in opponent or "search_black" in opponent:
+        return "general_search"
     if "vibefive" in opponent:
         return "vibefive"
     if "chloris" in opponent:
-        return "calculator"
+        return "general_search"
     if "katagomo" in opponent:
         return "katagomo"
     if "jax" in opponent:
@@ -507,16 +534,22 @@ def resolve_auto_base_target(opponent):
     return "gomocup"
 
 
-def resolve_auto_white_route(opponent):
+def resolve_auto_white_target(opponent):
     opponent = (opponent or "").strip().lower()
-    if opponent in ("", "http_fucusy", "fucusy", "gomoku-first-move-always-win"):
-        return "fucusy", "fucusy"
+    if (
+        opponent in ("", "proof_tree", "proof_tree_black", "first_player", "first_player_win")
+        or "proof_tree" in opponent
+        or "first_player" in opponent
+    ):
+        return "proof_tree", "proof_tree"
     if "alphagomoku" in opponent:
         return "jax25", "gomocup"
     if "yixin" in opponent:
         return "alphagomoku_mk26", "gomocup"
     if "embryo" in opponent:
         return "gomocup", "gomocup"
+    if "general_search" in opponent or "search_black" in opponent or "rapfi" in opponent or "chloris" in opponent:
+        return "advisor_ensemble", "general_search"
     if "slowrenju" in opponent:
         return "alphagomoku_mk26", resolve_auto_base_target(opponent)
     if any(name in opponent for name in ("jax", "vibefive", "skyzero", "stardust")):
@@ -526,8 +559,8 @@ def resolve_auto_white_route(opponent):
     if "katagomo" in opponent:
         return "alphagomoku_mk26", resolve_auto_base_target(opponent)
     if any(name in opponent for name in ("rapfi", "chloris", "starpoint")):
-        return "teacher_ensemble", resolve_auto_base_target(opponent)
-    return "teacher_ensemble", resolve_auto_base_target(opponent)
+        return "advisor_ensemble", resolve_auto_base_target(opponent)
+    return "advisor_ensemble", resolve_auto_base_target(opponent)
 
 sys.path.insert(0, UPSTREAM_SCRIPT_DIR)
 from divided_solution_manager import find_next_steps_from_db  # noqa: E402
@@ -802,11 +835,11 @@ def is_legal_response_move(steps, move):
     return move_to_xy(move) not in occupied(steps)
 
 
-def calculator_black_best(
+def general_search_black_best(
     steps,
-    turn_time_ms=CALCULATOR_BLACK_MS,
-    max_depth=CALCULATOR_BLACK_DEPTH,
-    threads=CALCULATOR_BLACK_THREADS,
+    turn_time_ms=SEARCH_BLACK_MS,
+    max_depth=SEARCH_BLACK_DEPTH,
+    threads=SEARCH_BLACK_THREADS,
 ):
     board_line = "YXBOARD"
     side = 1
@@ -821,7 +854,7 @@ def calculator_black_best(
         "RELOADCONFIG config.toml",
         "INFO RULE 0",
         "INFO THREAD_NUM %d" % threads,
-        "INFO CAUTION_FACTOR %d" % CALCULATOR_BLACK_CAND_RANGE,
+        "INFO CAUTION_FACTOR %d" % SEARCH_BLACK_CAND_RANGE,
         "INFO STRENGTH 100",
         "INFO TIMEOUT_TURN %d" % turn_time_ms,
         "INFO TIMEOUT_MATCH 9999000",
@@ -830,7 +863,7 @@ def calculator_black_best(
         "INFO SHOW_DETAIL 3",
         "INFO PONDERING 0",
         "INFO SWAPABLE 1",
-        "INFO HASH_SIZE %d" % CALCULATOR_BLACK_HASH_KB,
+        "INFO HASH_SIZE %d" % SEARCH_BLACK_HASH_KB,
         board_line,
         "YXNBEST 1",
         "END",
@@ -881,7 +914,7 @@ def calculator_black_best(
         elif line.startswith("INFO TOTALTIME "):
             detail["totaltime"] = int(line.split()[-1])
     if best is None:
-        raise RuntimeError("calculator black did not return a move: " + proc.stdout[-2000:])
+        raise RuntimeError("general-search black did not return a move: " + proc.stdout[-2000:])
     return {
         "best": best,
         "bestline": bestline,
@@ -890,22 +923,22 @@ def calculator_black_best(
             "turn_time_ms": turn_time_ms,
             "max_depth": max_depth,
             "threads": threads,
-            "hash_kb": CALCULATOR_BLACK_HASH_KB,
-            "cand_range": CALCULATOR_BLACK_CAND_RANGE,
+            "hash_kb": SEARCH_BLACK_HASH_KB,
+            "cand_range": SEARCH_BLACK_CAND_RANGE,
             "strength": 100,
         },
         **detail,
     }
 
 
-def calculator_black_response(steps, reason, base_response=None, started_at=None):
+def general_search_black_response(steps, reason, base_response=None, started_at=None):
     started_at = time.time() if started_at is None else started_at
     steps_url = steps_to_string(steps)
     request_move_count = len(steps)
-    calc = calculator_black_best(steps)
-    move = calc["best"]
+    search_result = general_search_black_best(steps)
+    move = search_result["best"]
     if not is_legal_response_move(steps, move):
-        raise RuntimeError("calculator black returned illegal move: %s" % move)
+        raise RuntimeError("general-search black returned illegal move: %s" % move)
     x, y = move_to_xy(move)
     response = {
         "input": steps_url,
@@ -914,20 +947,19 @@ def calculator_black_response(steps, reason, base_response=None, started_at=None
         "x": x,
         "y": y,
         "selected_move": move,
-        "source": "calculator_black",
-        "source_detail": "full calculator/Rapfi black fallback",
-        "black_engine": "calculator_black",
-        "current_black_engine": "calculator_black",
+        "source": "general_search_black",
+        "source_detail": "full Rapfi general-search black fallback",
+        "active_black_engine": "general_search_black",
         "fallback_reason": reason,
         "db_hit": False,
         "possible_moves_raw": [move],
         "possible_moves_unique": [move],
         "possible_move_count_raw": 1,
         "possible_move_count_unique": 1,
-        "calculator": calc,
+        "search_engine": search_result,
     }
     if base_response is not None:
-        response["fucusy_response_before_fallback"] = {
+        response["proof_tree_response_before_fallback"] = {
             key: base_response.get(key)
             for key in (
                 "source",
@@ -944,7 +976,7 @@ def calculator_black_response(steps, reason, base_response=None, started_at=None
     return response
 
 
-def choose_fucusy_black_move(steps, started_at):
+def choose_proof_tree_black_move(steps, started_at):
     steps_url = steps_to_string(steps)
     request_move_count = len(steps)
     possible_moves = []
@@ -959,8 +991,7 @@ def choose_fucusy_black_move(steps, started_at):
             "selected_move": "h8",
             "source": "opening_default",
             "source_detail": "frontend/original-opening",
-            "black_engine": "fucusy_black",
-            "current_black_engine": "fucusy_black",
+            "active_black_engine": "proof_tree_black",
             "fallback_reason": None,
             "db_hit": False,
             "possible_moves_raw": ["h8"],
@@ -983,8 +1014,7 @@ def choose_fucusy_black_move(steps, started_at):
             "selected_move": next_move,
             "source": "leveldb",
             "source_detail": "leveldb.db",
-            "black_engine": "fucusy_black",
-            "current_black_engine": "fucusy_black",
+            "active_black_engine": "proof_tree_black",
             "fallback_reason": None,
             "db_hit": True,
             "possible_moves_raw": possible_moves,
@@ -1013,8 +1043,7 @@ def choose_fucusy_black_move(steps, started_at):
         "request_move_count": request_move_count,
         "source": "web_search",
         "source_detail": "web_search",
-        "black_engine": "fucusy_black",
-        "current_black_engine": "fucusy_black",
+        "active_black_engine": "proof_tree_black",
         "fallback_reason": None,
         "db_hit": False,
         "web_search_returncode": proc.returncode,
@@ -1030,37 +1059,37 @@ def choose_fucusy_black_move(steps, started_at):
     return response
 
 
-def should_fallback_to_calculator_black(steps, fucusy_response):
+def should_use_general_search_black(steps, proof_tree_response):
     if steps and steps[0] != "h8":
         return "first_black_is_not_h8"
-    move = fucusy_response.get("selected_move")
+    move = proof_tree_response.get("selected_move")
     if not is_legal_response_move(steps, move):
-        return "fucusy_no_legal_winning_path"
+        return "proof_tree_no_legal_move"
     return None
 
 
 def choose_black_move(steps):
     started_at = time.time()
     if steps and steps[0] != "h8":
-        return calculator_black_response(steps, "first_black_is_not_h8", started_at=started_at)
+        return general_search_black_response(steps, "first_black_is_not_h8", started_at=started_at)
     try:
-        response = choose_fucusy_black_move(steps, started_at)
+        response = choose_proof_tree_black_move(steps, started_at)
     except Exception as exc:
         response = {
-            "source": "fucusy_black_error",
-            "source_detail": "fucusy black path raised before producing a legal move",
+            "source": "proof_tree_black_error",
+            "source_detail": "proof-tree black path raised before producing a legal move",
             "error": type(exc).__name__,
             "message": str(exc),
         }
-        return calculator_black_response(
+        return general_search_black_response(
             steps,
-            "fucusy_black_exception:%s" % type(exc).__name__,
+            "proof_tree_black_exception:%s" % type(exc).__name__,
             base_response=response,
             started_at=started_at,
         )
-    reason = should_fallback_to_calculator_black(steps, response)
+    reason = should_use_general_search_black(steps, response)
     if reason:
-        return calculator_black_response(steps, reason, base_response=response, started_at=started_at)
+        return general_search_black_response(steps, reason, base_response=response, started_at=started_at)
     response["elapsed_ms"] = int((time.time() - started_at) * 1000)
     return response
 
@@ -1219,7 +1248,7 @@ def pbrain_info_commands(turn_time_ms, max_depth, threads):
     commands = [
         "INFO timeout_turn %d" % turn_time_ms,
         "INFO timeout_match 9999000",
-        "INFO max_memory %d" % GOMOCUP_TEACHER_MEMORY_BYTES,
+        "INFO max_memory %d" % GOMOCUP_ADVISOR_MEMORY_BYTES,
         "INFO thread_num %d" % threads,
         "INFO rule 0",
         "INFO game_type 1",
@@ -1244,7 +1273,7 @@ def pbrain_send_board(proc, steps, own_color=2):
     _pbrain_send(proc, "DONE")
 
 
-class PersistentPBrainTeacher:
+class PersistentPBrainAdvisor:
     def __init__(self, name, exe, weight):
         self.name = name
         self.exe = exe
@@ -1361,20 +1390,20 @@ class PersistentPBrainTeacher:
                 }
 
 
-PERSISTENT_TEACHERS = {}
+PERSISTENT_ADVISORS = {}
 
 
-def persistent_teacher_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=2):
-    teacher = PERSISTENT_TEACHERS.get(name)
-    if teacher is None:
-        teacher = PersistentPBrainTeacher(name, exe, weight)
-        PERSISTENT_TEACHERS[name] = teacher
-    return teacher.query(steps, turn_time_ms, max_depth, threads, own_color=own_color)
+def persistent_advisor_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=2):
+    advisor = PERSISTENT_ADVISORS.get(name)
+    if advisor is None:
+        advisor = PersistentPBrainAdvisor(name, exe, weight)
+        PERSISTENT_ADVISORS[name] = advisor
+    return advisor.query(steps, turn_time_ms, max_depth, threads, own_color=own_color)
 
 
-def pbrain_teacher_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=2):
-    if GOMOCUP_TEACHER_PERSISTENT:
-        return persistent_teacher_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=own_color)
+def pbrain_advisor_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=2):
+    if GOMOCUP_ADVISOR_PERSISTENT:
+        return persistent_advisor_best(name, exe, weight, steps, turn_time_ms, max_depth, threads, own_color=own_color)
 
     started = time.time()
     if not os.path.exists(exe):
@@ -1471,18 +1500,18 @@ def pbrain_teacher_best(name, exe, weight, steps, turn_time_ms, max_depth, threa
                     pass
 
 
-def gomocup_teacher_votes(steps, turn_time_ms, max_depth, threads):
+def gomocup_advisor_votes(steps, turn_time_ms, max_depth, threads):
     started = time.time()
     votes = []
-    max_workers = max(1, min(GOMOCUP_TEACHER_MAX_WORKERS, len(GOMOCUP_VOTING_TEACHERS)))
+    max_workers = max(1, min(GOMOCUP_ADVISOR_MAX_WORKERS, len(GOMOCUP_VOTING_ADVISORS)))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(pbrain_teacher_best, name, exe, weight, steps, turn_time_ms, max_depth, threads)
-            for name, exe, weight in GOMOCUP_VOTING_TEACHERS
+            executor.submit(pbrain_advisor_best, name, exe, weight, steps, turn_time_ms, max_depth, threads)
+            for name, exe, weight in GOMOCUP_VOTING_ADVISORS
         ]
         for future in as_completed(futures):
             votes.append(future.result())
-    order = {name: index for index, (name, _exe, _weight) in enumerate(GOMOCUP_VOTING_TEACHERS)}
+    order = {name: index for index, (name, _exe, _weight) in enumerate(GOMOCUP_VOTING_ADVISORS)}
     votes.sort(key=lambda vote: order.get(vote.get("name"), 999))
     return {
         "votes": votes,
@@ -1501,14 +1530,14 @@ def gomocup_teacher_votes(steps, turn_time_ms, max_depth, threads):
 def gomocup_adversary_validations(steps, candidate_moves, turn_time_ms, max_depth, threads):
     started = time.time()
     tasks = []
-    teachers = GOMOCUP_TEACHERS[: max(1, min(GOMOCUP_ADVERSARY_TEACHERS, len(GOMOCUP_TEACHERS)))]
-    max_workers = max(1, min(GOMOCUP_TEACHER_MAX_WORKERS, len(candidate_moves) * len(teachers)))
+    advisors = GOMOCUP_ADVISORS[: max(1, min(GOMOCUP_ADVERSARY_ADVISORS, len(GOMOCUP_ADVISORS)))]
+    max_workers = max(1, min(GOMOCUP_ADVISOR_MAX_WORKERS, len(candidate_moves) * len(advisors)))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for move in candidate_moves:
             after_white = steps + [move]
-            for name, exe, weight in teachers:
+            for name, exe, weight in advisors:
                 future = executor.submit(
-                    pbrain_teacher_best,
+                    pbrain_advisor_best,
                     name,
                     exe,
                     weight,
@@ -1532,7 +1561,7 @@ def gomocup_adversary_validations(steps, candidate_moves, turn_time_ms, max_dept
     return {
         "by_move": by_move,
         "elapsed_ms": int((time.time() - started) * 1000),
-        "teacher_count": len(teachers),
+        "advisor_count": len(advisors),
     }
 
 
@@ -1568,7 +1597,7 @@ def choose_white_move(steps, settings=None):
     requested_target = normalize_white_target(settings.get("target"))
     opponent = (settings.get("opponent") or "").strip()
     if requested_target in AUTO_TARGETS:
-        target, auto_base_target = resolve_auto_white_route(opponent)
+        target, auto_base_target = resolve_auto_white_target(opponent)
         base_target = normalize_white_target(settings.get("base_target") or auto_base_target)
     else:
         target = requested_target
@@ -1583,8 +1612,8 @@ def choose_white_move(steps, settings=None):
         raise ValueError("game already has a five-in-a-row")
 
     rapfi = rapfi_best(steps, turn_time_ms=turn_time_ms, max_depth=max_depth, threads=threads)
-    direct_teacher = direct_teacher_spec(target)
-    if requested_target in AUTO_TARGETS and direct_teacher is not None and base_target in AUTO_DIRECT_EXACT_BOOK_BASE_TARGETS:
+    direct_advisor = direct_advisor_spec(target)
+    if requested_target in AUTO_TARGETS and direct_advisor is not None and base_target in AUTO_DIRECT_EXACT_BOOK_BASE_TARGETS:
         auto_book_entry = TARGET_BOOKS.get(base_target, {}).get(tuple(steps))
         if auto_book_entry and move_to_xy(auto_book_entry[0]) not in occupied(steps):
             move = auto_book_entry[0]
@@ -1596,12 +1625,12 @@ def choose_white_move(steps, settings=None):
                 "y": y,
                 "selected_move": move,
                 "source": "white_auto_direct_exact_book",
-                "source_detail": "exact base-target book override before direct PBrain teacher",
+                "source_detail": "exact base-target book override before direct Gomocup advisor",
                 "target": target,
                 "requested_target": requested_target,
                 "opponent": opponent,
                 "base_target": base_target,
-                "direct_teacher": direct_teacher[0],
+                "direct_advisor": direct_advisor[0],
                 "use_black_db_reverse": False,
                 "use_deep_tactics": False,
                 "rapfi": rapfi,
@@ -1628,12 +1657,12 @@ def choose_white_move(steps, settings=None):
                 "candidate_count": 1,
                 "elapsed_ms": int((time.time() - started) * 1000),
             }
-    if direct_teacher is not None:
-        teacher_name, teacher_exe, teacher_weight = direct_teacher
-        reply = pbrain_teacher_best(
-            teacher_name,
-            teacher_exe,
-            teacher_weight,
+    if direct_advisor is not None:
+        advisor_name, advisor_exe, advisor_weight = direct_advisor
+        reply = pbrain_advisor_best(
+            advisor_name,
+            advisor_exe,
+            advisor_weight,
             steps,
             turn_time_ms=turn_time_ms,
             max_depth=max_depth,
@@ -1642,12 +1671,12 @@ def choose_white_move(steps, settings=None):
         )
         if reply.get("status") != "ok":
             raise RuntimeError(
-                "direct Gomocup teacher %s failed: %s"
-                % (teacher_name, reply.get("message") or reply.get("status"))
+                "direct Gomocup advisor %s failed: %s"
+                % (advisor_name, reply.get("message") or reply.get("status"))
             )
         move = reply.get("move")
         if not move or move_to_xy(move) in occupied(steps):
-            raise RuntimeError("direct Gomocup teacher %s returned illegal move: %s" % (teacher_name, move))
+            raise RuntimeError("direct Gomocup advisor %s returned illegal move: %s" % (advisor_name, move))
         x, y = move_to_xy(move)
         after = steps + [move]
         return {
@@ -1660,11 +1689,11 @@ def choose_white_move(steps, settings=None):
             "target": target,
             "requested_target": requested_target,
             "opponent": opponent,
-            "direct_teacher": teacher_name,
+            "direct_advisor": advisor_name,
             "use_black_db_reverse": False,
             "use_deep_tactics": False,
             "rapfi": rapfi,
-            "teacher_reply": reply,
+            "advisor_reply": reply,
             "black_immediate_wins_after": immediate_winning_moves(after, 1)[:8],
             "white_has_five_after": has_five(after, 2),
             "rapfi_settings": {
@@ -1677,23 +1706,23 @@ def choose_white_move(steps, settings=None):
             "chosen": {
                 "move": move,
                 "score": None,
-                "status": "direct_teacher:%s" % teacher_name,
+                "status": "direct_advisor:%s" % advisor_name,
             },
             "candidates": [],
             "candidate_count": 1,
             "elapsed_ms": int((time.time() - started) * 1000),
         }
-    if target in TEACHER_ENSEMBLE_TARGETS:
+    if target in ADVISOR_ENSEMBLE_TARGETS:
         base_resistance_book = TARGET_BOOKS.get(base_target, {})
         base_use_black_db_reverse = base_target in DB_REVERSE_TARGETS
-        teacher_result = gomocup_teacher_votes(
+        advisor_result = gomocup_advisor_votes(
             steps,
             turn_time_ms=turn_time_ms,
             max_depth=max_depth,
             threads=threads,
         )
         votes_by_move = {}
-        for vote in teacher_result["ok_votes"]:
+        for vote in advisor_result["ok_votes"]:
             move = vote.get("move")
             if not move or move_to_xy(move) in occupied(steps):
                 continue
@@ -1738,7 +1767,7 @@ def choose_white_move(steps, settings=None):
                 status = "white_immediate_win"
             else:
                 score = min(profile["heuristic"], 2000)
-                status = "teacher_ensemble"
+                status = "advisor_ensemble"
                 if base_use_black_db_reverse:
                     db_replies = black_db_replies(after)
                     if not db_replies:
@@ -1755,7 +1784,7 @@ def choose_white_move(steps, settings=None):
                 if vote_weight:
                     score += vote_weight * 4_000
                     score += max(0, len(move_votes) - 1) * 90_000
-                    status += "+teacher_votes"
+                    status += "+advisor_votes"
                 if is_book_move:
                     score += 3_000_000 + min(book_entry[1], 1_200_000)
                     status += "+base_book:%s" % book_entry[2]
@@ -1817,9 +1846,9 @@ def choose_white_move(steps, settings=None):
                     "move": move,
                     "score": score,
                     "status": status,
-                    "teacher_vote_weight": vote_weight,
-                    "teacher_vote_count": len(move_votes),
-                    "teacher_votes": move_votes,
+                    "advisor_vote_weight": vote_weight,
+                    "advisor_vote_count": len(move_votes),
+                    "advisor_votes": move_votes,
                     "black_db_replies": db_replies[:5],
                     "black_immediate_wins": black_immediate_wins[:8],
                     "black_two_step_threats": black_deep_threats[:8],
@@ -1889,8 +1918,8 @@ def choose_white_move(steps, settings=None):
             "x": x,
             "y": y,
             "selected_move": chosen["move"],
-            "source": "white_teacher_ensemble",
-            "source_detail": "weighted Gomocup teacher ensemble with immediate-win priority and immediate-loss veto",
+            "source": "white_advisor_ensemble",
+            "source_detail": "weighted Gomocup advisor ensemble with immediate-win priority and immediate-loss veto",
             "target": target,
             "requested_target": requested_target,
             "opponent": opponent,
@@ -1898,7 +1927,7 @@ def choose_white_move(steps, settings=None):
             "use_black_db_reverse": base_use_black_db_reverse,
             "use_deep_tactics": use_deep_tactics,
             "rapfi": rapfi,
-            "teacher_ensemble": teacher_result,
+            "advisor_ensemble": advisor_result,
             "adversary_validation": adversary_validation,
             "ignored_rapfi_moves": [],
             "rapfi_settings": {
@@ -1918,27 +1947,27 @@ def choose_white_move(steps, settings=None):
             "candidate_count": len(scored),
             "elapsed_ms": int((time.time() - started) * 1000),
         }
-    if target in TEACHER_TARGETS:
-        teacher_candidates = []
+    if target in ADVISOR_TARGETS:
+        advisor_candidates = []
         if rapfi.get("best"):
-            teacher_candidates.append(rapfi["best"])
-        teacher_candidates.extend(rapfi.get("bestline", [])[:6])
-        teacher_candidates.extend(legal_moves_near(steps, radius=2, limit=28))
-        seen_teacher = set()
-        teacher_scored = []
-        for index, move in enumerate(teacher_candidates):
-            if move in seen_teacher or not move or move_to_xy(move) in occupied(steps):
+            advisor_candidates.append(rapfi["best"])
+        advisor_candidates.extend(rapfi.get("bestline", [])[:6])
+        advisor_candidates.extend(legal_moves_near(steps, radius=2, limit=28))
+        seen_advisor = set()
+        advisor_scored = []
+        for index, move in enumerate(advisor_candidates):
+            if move in seen_advisor or not move or move_to_xy(move) in occupied(steps):
                 continue
-            seen_teacher.add(move)
+            seen_advisor.add(move)
             profile = relevance_profile(steps, move)
             after = steps + [move]
             black_immediate_wins = immediate_winning_moves(after, 1)
-            status = "teacher_rapfi_best" if move == rapfi.get("best") else "teacher_fallback"
+            status = "advisor_rapfi_best" if move == rapfi.get("best") else "advisor_fallback"
             score = 1_000_000 - index * 10_000 + min(profile["heuristic"], 1200)
             if black_immediate_wins:
                 score -= 5_000_000 + 100_000 * len(black_immediate_wins)
                 status += "+allows_black_immediate_win"
-            teacher_scored.append(
+            advisor_scored.append(
                 {
                     "move": move,
                     "score": score,
@@ -1957,18 +1986,18 @@ def choose_white_move(steps, settings=None):
                     "ensemble_entries": [],
                 }
             )
-        if not teacher_scored:
+        if not advisor_scored:
             raise ValueError("no legal white move")
-        teacher_scored.sort(key=lambda r: r["score"], reverse=True)
-        chosen = teacher_scored[0]
+        advisor_scored.sort(key=lambda r: r["score"], reverse=True)
+        chosen = advisor_scored[0]
         x, y = move_to_xy(chosen["move"])
         return {
             "input": steps_to_string(steps),
             "x": x,
             "y": y,
             "selected_move": chosen["move"],
-            "source": "white_teacher",
-            "source_detail": "rapfi-best teacher policy with immediate-loss veto and legal fallback",
+            "source": "white_advisor",
+            "source_detail": "Rapfi-best advisor policy with immediate-loss veto and legal fallback",
             "target": target,
             "requested_target": requested_target,
             "opponent": opponent,
@@ -1984,8 +2013,8 @@ def choose_white_move(steps, settings=None):
             "book_entry": None,
             "ensemble_book_entries": {},
             "chosen": chosen,
-            "candidates": teacher_scored[:12],
-            "candidate_count": len(teacher_scored),
+            "candidates": advisor_scored[:12],
+            "candidate_count": len(advisor_scored),
             "elapsed_ms": int((time.time() - started) * 1000),
         }
     candidates = set(legal_moves_near(steps, radius=2, limit=28))
@@ -2130,7 +2159,7 @@ def choose_white_move(steps, settings=None):
         "y": y,
         "selected_move": chosen["move"],
         "source": "white_hybrid",
-        "source_detail": "rapfi + target-mode + optional fucusy-black-db-reverse + optional target-book + longest-resistance(depth=3)",
+        "source_detail": "strong local search + normalized opponent target + optional proof-tree reverse check + empirical response book + resistance search(depth=3)",
         "target": target,
         "requested_target": requested_target,
         "opponent": opponent,
@@ -2177,6 +2206,17 @@ def safe_json_bytes(value):
     return json.dumps(json_safe_value(value), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
+def infer_black_engine(result):
+    source = str(result.get("source") or "")
+    if source.startswith("general_search_black"):
+        return "general_search_black"
+    if source.startswith("proof_tree_black"):
+        return "proof_tree_black"
+    if source in ("leveldb", "web_search", "opening_default"):
+        return "proof_tree_black"
+    return result.get("active_black_engine") or "proof_tree_black"
+
+
 def attach_public_summary(result, color):
     source = result.get("source")
     summary = {
@@ -2186,11 +2226,7 @@ def attach_public_summary(result, color):
         "elapsed_ms": result.get("elapsed_ms"),
     }
     if color == "BLACK":
-        active_black_engine = (
-            result.get("active_black_engine")
-            or result.get("current_black_engine")
-            or result.get("black_engine")
-        )
+        active_black_engine = infer_black_engine(result)
         result["active_black_engine"] = active_black_engine
         summary.update(
             {
@@ -2226,11 +2262,14 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 class BlackNextStepHandler(BaseHandler):
-    def get(self):
+    async def get(self):
         self.set_header("Content-Type", "application/json")
         try:
             steps = parse_steps(self.get_argument("stepsString", ""))
-            result = attach_public_summary(choose_black_move(steps), "BLACK")
+            result = await tornado.ioloop.IOLoop.current().run_in_executor(
+                ENGINE_EXECUTOR,
+                lambda: attach_public_summary(choose_black_move(steps), "BLACK"),
+            )
             self.write(safe_json_bytes(result))
         except Exception as exc:
             self.set_status(400)
@@ -2242,7 +2281,7 @@ class BlackNextStepHandler(BaseHandler):
 
 
 class WhiteNextStepHandler(BaseHandler):
-    def get(self):
+    async def get(self):
         self.set_header("Content-Type", "application/json")
         try:
             steps = parse_steps(self.get_argument("stepsString", ""))
@@ -2270,7 +2309,10 @@ class WhiteNextStepHandler(BaseHandler):
                 "opponent": self.get_argument("opponent", ""),
                 "deep_tactics": self.get_argument("deepTactics", "0").strip().lower() in ("1", "true", "yes", "on"),
             }
-            result = attach_public_summary(choose_white_move(steps, settings=settings), "WHITE")
+            result = await tornado.ioloop.IOLoop.current().run_in_executor(
+                ENGINE_EXECUTOR,
+                lambda: attach_public_summary(choose_white_move(steps, settings=settings), "WHITE"),
+            )
             self.write(safe_json_bytes(result))
         except Exception as exc:
             self.set_status(400)
@@ -2300,5 +2342,5 @@ if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8090
     app = make_app()
     app.listen(port)
-    print("white ai lab listening on http://127.0.0.1:%d/gomoku.html" % port, flush=True)
+    print("Gokumoku listening on http://127.0.0.1:%d/gomoku.html" % port, flush=True)
     tornado.ioloop.IOLoop.current().start()
