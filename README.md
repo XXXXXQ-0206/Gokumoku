@@ -2,52 +2,57 @@
 
 # Gokumoku
 
-Gokumoku is an experimental, high-strength Gomoku AI lab focused on two goals:
+Gokumoku is a web-playable Gomoku AI project built around a hybrid engine design. It brings together a proof-oriented black engine, a strong general-purpose search engine, and a white-side defensive system tuned through local engine matches.
 
-- preserve fucusy-style black behavior when the proven first-move-win path is available
-- build a stronger white defensive AI by combining resistance books, Rapfi analysis, Gomocup teacher voting, and calculator-style tactical routing
+The goal is simple: make a Gomoku AI that is interesting to play against, strong enough to be tested against Gomocup-class engines, and easy to run locally with a browser frontend.
 
-It is intended as a practical research system rather than a packaged engine with bundled networks and databases. Large third-party engines, fucusy proof data, and local benchmark traces are intentionally not included in this clean repository.
+## Design
 
-## What Is Included
+Gokumoku treats black and white differently, because they are different problems.
 
-- A Tornado web server with:
-  - `/next_step` for black
-  - `/white_next_step` for white
-  - static frontend at `/gomoku.html`
-- The adapted Gomoku web frontend with manual play, AI black, AI white, undo, restart, terminal detection, and a compact diagnostics table.
-- Public test/benchmark helper tools.
-- Configuration examples for local fucusy, Rapfi, and Gomocup engine paths.
+For black, the engine combines two complementary sources of strength. In positions covered by the first-move-win proof data, it follows exact winning continuations from the proof database. When the position falls outside that solved tree, it switches to a full-strength search engine so the game can continue with strong practical play instead of stalling.
 
-## Current Local Results
+For white, Gokumoku uses its own defensive decision layer. It looks for immediate tactical wins and losses, uses Rapfi-style search for local evaluation, consults multiple Gomocup-compatible engines when available, and prefers lines that have performed well in repeated local engine matches. The result is not a passive "block everything" player; it actively tries to survive longer, punish mistakes, and convert tactical chances when black leaves the proven path.
 
-These are local experimental checks, not official Elo ratings.
+## Features
 
-| Scenario | Settings | Result |
+- Browser board with manual play, AI black, AI white, undo, restart, and win detection.
+- `/next_step` endpoint for black moves.
+- `/white_next_step` endpoint for white moves.
+- Position-aware black engine selection: proof data when available, strong search fallback otherwise.
+- White engine that can use Rapfi and optional Gomocup-compatible engines for stronger decisions.
+- Local benchmark helpers for engine-vs-engine testing.
+- Optional LAN proxy for playing from another device on the same network.
+
+## Local Results
+
+These are local experimental results, not official Gomocup ratings.
+
+| Test | Settings | Result |
 |---|---:|---|
-| fucusy black invariant | `_h8_a1`, high level | black returns `i9` from LevelDB |
+| proof-data black sanity check | `_h8_a1`, high level | black returns `i9` from LevelDB |
 | calculator/Rapfi black vs calculator-route white | depth 64, 4 threads, 5000 ms/turn | BLACK/21 |
-| calculator/Rapfi black vs current auto white | depth 64, 4 threads, 5000 ms/turn | BLACK/33 |
-| 14-engine local single round | depth 4, 1 thread, 500 ms/turn | 8W-1D-5L |
-| accepted 11-engine local single round | depth 4, 1 thread, 500 ms/turn | 5W-0D-6L |
+| calculator/Rapfi black vs Gokumoku auto white | depth 64, 4 threads, 5000 ms/turn | BLACK/33 |
+| local 14-engine single round | depth 4, 1 thread, 500 ms/turn | 8W-1D-5L |
+| local 11-engine acceptance round | depth 4, 1 thread, 500 ms/turn | 5W-0D-6L |
 
-The project is built to chase near-frontier public Gomoku strength, but it is not an official Gomocup #1 claim and it does not yet prove stable non-loss against every public engine.
+Gokumoku is designed to push toward very strong public Gomoku play, but the numbers above are local reproducibility notes rather than official rankings.
 
-## Run
+## Run Locally
 
-Install Python dependencies:
+Install dependencies:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Configure the external engines and data:
+Create a local configuration:
 
 ```bash
 cp .env.example .env
 ```
 
-Then export the variables from `.env` in your shell, or set them manually.
+Set the paths in `.env` for the proof data, Rapfi, and any Gomocup engines you want to use.
 
 Start the server:
 
@@ -62,26 +67,28 @@ Open:
 http://127.0.0.1:8090/gomoku.html
 ```
 
-For LAN play from another device, run a reverse proxy or use the helper:
+To play from another device on the same LAN:
 
 ```bash
 node tools/lan_proxy.js --listen-host=<your-lan-ip> --listen-port=8090 --target-host=127.0.0.1 --target-port=8090
 ```
 
-## Required External Assets
+## External Assets
 
-For full strength you need to provide:
+This clean repository does not bundle large engines, neural network weights, proof databases, or raw benchmark logs.
 
-- fucusy LevelDB/proof data in `server/leveldb.db` or another configured path
-- fucusy `web_search` binary if you want exact original fallback search
-- Rapfi executable and networks
-- optional Gomocup PBrain engines under `GOMOCUP_ENGINE_ROOT`
+For full strength, provide:
 
-Without these assets, the UI can still load, but the AI will not match the reported strength.
+- first-move-win proof data and LevelDB files from `fucusy/gomoku-first-move-always-win`
+- the related `web_search` binary if you want exact proof-search fallback behavior
+- Rapfi executable and network files
+- optional Gomocup-compatible PBrain engines under `GOMOCUP_ENGINE_ROOT`
+
+Without those assets, the web UI can still load, but the AI will not match the reported strength.
 
 ## Credits
 
-Gokumoku stands on the shoulders of:
+Gokumoku builds on and integrates ideas or components from:
 
 - [fucusy/gomoku-first-move-always-win](https://github.com/fucusy/gomoku-first-move-always-win)
 - [dhbloo/gomoku-calculator](https://github.com/dhbloo/gomoku-calculator)
