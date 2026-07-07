@@ -3,7 +3,8 @@ import json
 import os
 import queue
 import re
-import subprocess
+# PBrain engines are explicit local executables and are always called without shell=True.
+import subprocess  # nosec B404
 import sys
 import threading
 import time
@@ -108,9 +109,12 @@ def is_legal(steps, move):
 
 
 def http_json(url, params, timeout):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("HTTP player URL must use http or https: %s" % url)
     full_url = url + "?" + urllib.parse.urlencode(params)
     started = time.time()
-    with urllib.request.urlopen(full_url, timeout=timeout) as response:
+    with urllib.request.urlopen(full_url, timeout=timeout) as response:  # nosec B310
         data = json.loads(response.read().decode("utf-8"))
     data["_url"] = full_url
     data.setdefault("elapsed_ms", int((time.time() - started) * 1000))
@@ -214,7 +218,8 @@ class PBrainPlayer:
 
     def start_game(self, color):
         self.color = color
-        self.proc = subprocess.Popen(
+        # Configured local PBrain engine path; shell is not used.
+        self.proc = subprocess.Popen(  # nosec B603
             [self.exe],
             cwd=self.cwd,
             stdin=subprocess.PIPE,
@@ -315,8 +320,8 @@ class PBrainPlayer:
         except Exception:
             try:
                 self.proc.kill()
-            except Exception:
-                pass
+            except Exception as kill_exc:
+                sys.stderr.write("failed to kill PBrain engine %s: %s\n" % (self.name, kill_exc))
         self.proc = None
 
 

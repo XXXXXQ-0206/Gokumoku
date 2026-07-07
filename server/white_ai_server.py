@@ -4,7 +4,8 @@ import os
 import platform
 import queue
 import re
-import subprocess
+# PBrain/proof engines are configured local executables and are always called without shell=True.
+import subprocess  # nosec B404
 import sys
 import threading
 import time
@@ -869,7 +870,8 @@ def general_search_black_best(
         "END",
     ]
     started = time.time()
-    proc = subprocess.run(
+    # Configured local engine path; shell is not used.
+    proc = subprocess.run(  # nosec B603
         [RAPFI_EXE],
         input="\n".join(lines) + "\n",
         text=True,
@@ -1026,7 +1028,8 @@ def choose_proof_tree_black_move(steps, started_at):
     timeout_program = "timeout" if platform.system() == "Linux" else "gtimeout"
     env = os.environ.copy()
     env["LD_LIBRARY_PATH"] = "/usr/local/clang_9.0.0/lib:" + env.get("LD_LIBRARY_PATH", "")
-    proc = subprocess.run(
+    # Configured local proof-search binary; shell is not used.
+    proc = subprocess.run(  # nosec B603
         [timeout_program, "10s", WEB_SEARCH_EXE, steps_url],
         shell=False,
         text=True,
@@ -1174,7 +1177,8 @@ def rapfi_best(steps, turn_time_ms=WHITE_RAPFI_MS, max_depth=WHITE_RAPFI_DEPTH, 
         "END",
     ]
     started = time.time()
-    proc = subprocess.run(
+    # Configured local engine path; shell is not used.
+    proc = subprocess.run(  # nosec B603
         [RAPFI_EXE],
         input="\n".join(lines) + "\n",
         text=True,
@@ -1287,7 +1291,8 @@ class PersistentPBrainAdvisor:
     def _start(self, turn_time_ms):
         if not os.path.exists(self.exe):
             raise FileNotFoundError(self.exe)
-        self.proc = subprocess.Popen(
+        # Configured local PBrain engine path; shell is not used.
+        self.proc = subprocess.Popen(  # nosec B603
             [self.exe],
             cwd=os.path.dirname(self.exe),
             stdin=subprocess.PIPE,
@@ -1330,8 +1335,8 @@ class PersistentPBrainAdvisor:
         except Exception:
             try:
                 self.proc.kill()
-            except Exception:
-                pass
+            except Exception as kill_exc:
+                sys.stderr.write("failed to kill PBrain advisor %s: %s\n" % (self.name, kill_exc))
         self.proc = None
         self.lines = None
         self.reader = None
@@ -1419,7 +1424,8 @@ def pbrain_advisor_best(name, exe, weight, steps, turn_time_ms, max_depth, threa
     lines = queue.Queue()
     seen_tail = []
     try:
-        proc = subprocess.Popen(
+        # Configured local PBrain engine path; shell is not used.
+        proc = subprocess.Popen(  # nosec B603
             [exe],
             cwd=os.path.dirname(exe),
             stdin=subprocess.PIPE,
@@ -1496,8 +1502,8 @@ def pbrain_advisor_best(name, exe, weight, steps, turn_time_ms, max_depth, threa
             except Exception:
                 try:
                     proc.kill()
-                except Exception:
-                    pass
+                except Exception as kill_exc:
+                    sys.stderr.write("failed to kill PBrain advisor %s: %s\n" % (name, kill_exc))
 
 
 def gomocup_advisor_votes(steps, turn_time_ms, max_depth, threads):
