@@ -44,9 +44,9 @@ def game_score(row):
 def group_key(row, mode):
     settings = row.get("settings") or {}
     if mode == "black":
-        return (row.get("black_player") or "",)
+        return (row.get("black_player") or "", "", "")
     if mode == "target":
-        return (settings.get("white_target") or "", settings.get("resolved_white_target") or "")
+        return ("", settings.get("white_target") or "", settings.get("resolved_white_target") or "")
     if mode == "black-target":
         return (
             row.get("black_player") or "",

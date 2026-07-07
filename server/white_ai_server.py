@@ -2031,7 +2031,6 @@ def choose_white_move(steps, settings=None):
     candidates.update(ensemble_entries_by_move.keys())
     ignored_rapfi_moves = []
     rapfi_primary_usable = rapfi_move_is_usable(steps, rapfi.get("best"), rapfi)
-    rapfi_has_search_detail = bool(rapfi.get("bestline")) or rapfi.get("eval") is not None or rapfi.get("winrate") is not None
     if rapfi_primary_usable:
         candidates.add(rapfi["best"])
     elif rapfi.get("best"):
@@ -2267,6 +2266,13 @@ class BaseHandler(tornado.web.RequestHandler):
         self.finish()
 
 
+def public_error_payload(exc):
+    return {
+        "error": type(exc).__name__,
+        "message": "invalid request",
+    }
+
+
 class BlackNextStepHandler(BaseHandler):
     async def get(self):
         self.set_header("Content-Type", "application/json")
@@ -2279,11 +2285,7 @@ class BlackNextStepHandler(BaseHandler):
             self.write(safe_json_bytes(result))
         except Exception as exc:
             self.set_status(400)
-            self.write(safe_json_bytes({
-                "error": type(exc).__name__,
-                "message": str(exc),
-                "input": self.get_argument("stepsString", ""),
-            }))
+            self.write(safe_json_bytes(public_error_payload(exc)))
 
 
 class WhiteNextStepHandler(BaseHandler):
@@ -2322,16 +2324,7 @@ class WhiteNextStepHandler(BaseHandler):
             self.write(safe_json_bytes(result))
         except Exception as exc:
             self.set_status(400)
-            self.write(
-                json.dumps(
-                    {
-                        "error": type(exc).__name__,
-                        "message": str(exc),
-                        "input": self.get_argument("stepsString", ""),
-                    },
-                    ensure_ascii=False,
-                ).encode("utf-8")
-            )
+            self.write(safe_json_bytes(public_error_payload(exc)))
 
 
 def make_app():

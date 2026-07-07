@@ -1,0 +1,4 @@
+name: Gokumoku CodeQL config
+
+paths-ignore:
+  - server/web/js/jquery.js

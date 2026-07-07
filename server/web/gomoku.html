@@ -172,7 +172,7 @@
     for (var i = 0; i < 15; i++) {
         content = content + "<div>";
         for (var j = 0; j < 15; j++) {
-            content = content + "<img tag='.' lx='" + i + "' ly='" + j + "'  onClick='onClickCube(this)' id='" + i + "-" + j + "' style='" + getLocation(i, j) + "' src='pic/blank.png'>"
+            content = content + "<img tag='.' lx='" + i + "' ly='" + j + "'  onClick='onClickCube(this)' id='" + i + "-" + j + "' style='" + getLocation(i, j) + "' src='pic/blank.png'>";
         }
         content = content + "</div>";
     }
@@ -247,12 +247,7 @@
                 setFrontendError("init_steps", "invalid_or_occupied_move", steps[i]);
                 break;
             }
-            var color = aiColor;
-            if(i % 2){
-                color = getOtherColor(aiColor);
-            }else{
-                color = aiColor;
-            }
+            var color = i % 2 ? getOtherColor(aiColor) : aiColor;
             setColor(point.x, point.y, getColorChar(color));
             if (gameOver) {
                 break;
@@ -589,7 +584,7 @@
         var point = {
             "x": x,
             "y": y
-        }
+        };
         historyStack.push(point);
         if (source != "ai_response") {
             lastSubmittedPayload = null;
@@ -772,7 +767,7 @@
             "level": level,
             "gameId": gameId,
             "target": blackAiTarget
-        }
+        };
 
         thinking = true;
         var requestId = ++blackRequestId;
@@ -851,7 +846,7 @@
             "gameId": gameId,
             "target": whiteAiTarget,
             "opponent": getWhiteAiOpponent()
-        }
+        };
 
         whiteThinking = true;
         var requestId = ++whiteRequestId;
