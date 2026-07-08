@@ -2,17 +2,15 @@
 
 # Gokumoku
 
-Gokumoku is a web-playable Gomoku AI project built around a hybrid engine design. It brings together a proof-oriented black engine, a strong general-purpose search engine, and a white-side defensive system tuned through local engine matches.
+Gokumoku is a practical hybrid Gomoku engine. It combines first-player proof data, strong general-purpose search, and a white-side defensive decision layer. The project also provides a browser play interface, an automated match framework, and a terminal dashboard (TUI) for human play, local evaluation, and iterative tuning.
 
-The goal is simple: make a Gomoku AI that is interesting to play against, strong enough to be tested against Gomocup-class engines, and easy to run locally with a browser frontend.
+## Engine Architecture
 
-## Design
+Gokumoku uses different decision strategies for black and white, because the two sides face fundamentally different problems.
 
-Gokumoku treats black and white differently, because they are different problems.
+**Black** combines two sources of strength: proof-database continuations from a first-player-win proof project for covered positions, and a general-purpose search engine for manually composed positions or other states outside the proof tree. The switch is transparent to the frontend, while the API reports the currently active black engine.
 
-For black, the engine combines two complementary sources of strength. In positions covered by the first-move-win proof data, it follows exact winning continuations from the proof database. When the position falls outside that solved tree, it switches to a full-strength search engine so the game can continue with strong practical play instead of stalling.
-
-For white, Gokumoku uses its own defensive decision layer. It looks for immediate tactical wins and losses, uses Rapfi-style search for local evaluation, consults multiple Gomocup-compatible engines when available, and prefers lines that have performed well in repeated local engine matches. The result is not a passive "block everything" player; it actively tries to survive longer, punish mistakes, and convert tactical chances when black leaves the proven path.
+**White** is Gokumoku's own defensive decision layer. It uses an empirical response book built from historical self-play and multi-engine matches, checks immediate wins and losses first, evaluates candidate moves with strong engines such as Rapfi, and can consult multiple Gomocup-compatible engines when available. Its goal is to resist as long as possible, punish black deviations from the proof line, and counterattack when tactical chances appear.
 
 ## Features
 
@@ -23,20 +21,6 @@ For white, Gokumoku uses its own defensive decision layer. It looks for immediat
 - White engine that can use Rapfi and optional Gomocup-compatible engines for stronger decisions.
 - Local benchmark helpers for engine-vs-engine testing.
 - Optional LAN proxy for playing from another device on the same network.
-
-## Local Results
-
-These are local experimental results, not official Gomocup ratings.
-
-| Test | Settings | Result |
-|---|---:|---|
-| proof-data black sanity check | `_h8_a1`, high level | black returns `i9` from LevelDB |
-| calculator/Rapfi black vs calculator-route white | depth 64, 4 threads, 5000 ms/turn | BLACK/21 |
-| calculator/Rapfi black vs Gokumoku auto white | depth 64, 4 threads, 5000 ms/turn | BLACK/33 |
-| local 14-engine single round | depth 4, 1 thread, 500 ms/turn | 8W-1D-5L |
-| local 11-engine acceptance round | depth 4, 1 thread, 500 ms/turn | 5W-0D-6L |
-
-Gokumoku is designed to push toward very strong public Gomoku play, but the numbers above are local reproducibility notes rather than official rankings.
 
 ## Run Locally
 
@@ -75,16 +59,15 @@ node tools/lan_proxy.js --listen-host=<your-lan-ip> --listen-port=8090 --target-
 
 ## External Assets
 
-This clean repository does not bundle large engines, neural network weights, proof databases, or raw benchmark logs.
+This clean release repository does not bundle large engine binaries, neural network weights, LevelDB proof databases, or raw benchmark logs.
 
 For full strength, provide:
 
-- first-move-win proof data and LevelDB files from `fucusy/gomoku-first-move-always-win`
-- the related `web_search` binary if you want exact proof-search fallback behavior
-- Rapfi executable and network files
+- first-player proof data, LevelDB files, and the related `web_search` binary from [fucusy/gomoku-first-move-always-win](https://github.com/fucusy/gomoku-first-move-always-win)
+- Rapfi executable and network files from [dhbloo/rapfi](https://github.com/dhbloo/rapfi)
 - optional Gomocup-compatible PBrain engines under `GOMOCUP_ENGINE_ROOT`
 
-Without those assets, the web UI can still load, but the AI will not match the reported strength.
+Without those assets, the web UI can still load and play, but the AI strength will not match the full local configuration.
 
 ## Credits
 
